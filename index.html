@@ -339,6 +339,10 @@ nav button.active{color:var(--gold);}
       <div style="font-family:'Oswald',sans-serif;font-size:22px;color:var(--gold);" id="rm-op">Operación</div>
       <div style="font-size:13px;color:var(--dim);" id="rm-talla">Talla</div>
     </div>
+    <div style="position:relative;height:160px;margin-bottom:20px;background:var(--card2);border-radius:var(--rs);padding:10px;">
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;margin-bottom:5px;position:absolute;top:10px;left:14px;z-index:2;">Rendimiento (Pzs vs Min)</div>
+      <canvas id="rm-chart"></canvas>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
       <div style="background:var(--card2);border-radius:var(--rs);padding:12px;text-align:center;">
         <div style="font-family:'Space Mono',monospace;font-size:24px;font-weight:700;color:var(--chalk);" id="rm-pzs">0</div>
@@ -593,11 +597,13 @@ function reanudarSesion(id){
   }
 }
 
+let rmChartObj = null;
+
 function verResultado(id){
   const s = state.sesiones.find(x=>x.id===id);
   if(!s) return;
   const h = piezasHechas(s.id);
-  const regs = state.registros.filter(r=>r.sesionId===s.id);
+  const regs = state.registros.filter(r=>r.sesionId===s.id).sort((a,b)=>a.ts-b.ts);
   const t = regs.reduce((a,r)=>a+r.duracionSeg,0);
   const rate = t>0 ? Math.round(h/(t/3600)) : 0;
   
@@ -612,6 +618,32 @@ function verResultado(id){
   document.getElementById('rm-pzs').textContent = h;
   document.getElementById('rm-tiempo').textContent = hFormated;
   document.getElementById('rm-ritmo').textContent = rate;
+  
+  // Generar gráfico de rendimiento
+  const dataAct = [{x:0, y:0}];
+  let acumP=0, acumT=0;
+  regs.forEach(r=>{ acumP+=r.cantidad; acumT+=r.duracionSeg; dataAct.push({x:acumT/60, y:acumP}); }); // X en mins
+
+  if(rmChartObj) rmChartObj.destroy();
+  const ctx = document.getElementById('rm-chart').getContext('2d');
+  rmChartObj = new Chart(ctx, {
+    type:'line', 
+    data:{
+      datasets: [{
+        label: 'Progreso', data: dataAct,
+        borderColor:'#5a9f74', backgroundColor:'rgba(90,159,116,0.1)',
+        borderWidth:3, fill:true, tension:0.1
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{enabled:false}},
+      scales:{
+        x:{type:'linear', beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#a8b2bd'}},
+        y:{beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#a8b2bd'}}
+      }
+    }
+  });
   
   const modal = document.getElementById('result-modal');
   modal.style.display = 'flex';
