@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f1821">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="AVANCE Pro">
+<meta name="description" content="Control de producción y cortes">
+<title>AVANCE Pro — Control de Producción</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+/* ===== TOKENS ===== */
+:root{
+  --bg:#0f1821; --card:#1c2735; --card2:#243347;
+  --border:#2e4159; --border2:#3d5670;
+  --gold:#c17f3e; --gold-dim:#8f5f30; --gold-glow:rgba(193,127,62,.22);
+  --chalk:#f2ede1; --dim:#a8b2bd; --faint:#4e5f70;
+  --green:#5a9f74; --red:#c1554a;
+  --r:14px; --rs:9px;
+}
+*,*::before,*::after{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;height:100%;overflow-x:hidden;}
+body{
+  background:var(--bg); color:var(--chalk);
+  font-family:'Inter',system-ui,sans-serif;
+  min-height:100vh; display:flex; flex-direction:column;
+}
+body::before{
+  content:""; position:fixed; inset:0;
+  background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.012) 0,rgba(255,255,255,.012) 1px,transparent 1px,transparent 7px);
+  pointer-events:none; z-index:0;
+}
+
+/* ===== HEADER ===== */
+header{padding:16px 20px 10px;position:relative;z-index:2;}
+.brand{display:flex;align-items:center;gap:10px;font-family:'Oswald',sans-serif;font-weight:700;font-size:22px;letter-spacing:.08em;}
+.brand-dot{width:10px;height:10px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 4px var(--gold-glow);animation:pulse 2.4s ease-in-out infinite;flex-shrink:0;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 4px var(--gold-glow);}50%{box-shadow:0 0 0 9px rgba(193,127,62,.07);}}
+.brand-sub{font-size:11px;color:var(--dim);letter-spacing:.04em;font-weight:400;margin-top:2px;}
+.stitch{border:none;height:0;margin:0 20px;border-top:2px dashed var(--border2);opacity:.4;}
+
+/* ===== MAIN & VIEWS ===== */
+main{flex:1;padding:12px 20px 96px;position:relative;z-index:1;overflow-y:auto;}
+.view{display:none;}
+.view.active{display:block;animation:fadein .22s ease;}
+@keyframes fadein{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:translateY(0);}}
+
+/* ===== TYPE ===== */
+.eyebrow{font-family:'Oswald',sans-serif;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin:20px 0 8px;}
+.field-label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin-top:14px;margin-bottom:5px;}
+
+/* ===== INPUTS ===== */
+input[type=text],input[type=number],select{
+  width:100%;background:var(--card);border:1.5px solid var(--border2);color:var(--chalk);
+  padding:13px 14px;border-radius:var(--rs);font-family:'Inter',sans-serif;font-size:16px;
+  outline:none;transition:border-color .18s;-webkit-appearance:none;appearance:none;
+}
+select{background-image:url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23a8b2bd%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");background-repeat:no-repeat;background-position:right .7rem top 50%;background-size:.65rem auto;}
+input:focus,select:focus{border-color:var(--gold);}
+input::placeholder{color:var(--faint);}
+
+/* ===== BUTTONS ===== */
+.btn-primary{width:100%;padding:16px;background:var(--gold);color:var(--bg);border:none;border-radius:var(--r);font-family:'Oswald',sans-serif;font-weight:700;font-size:16px;letter-spacing:.04em;cursor:pointer;margin-top:18px;transition:transform .08s,background .12s;user-select:none;}
+.btn-primary:active{transform:scale(.97);background:var(--gold-dim);}
+.btn-secondary{width:100%;padding:13px;background:var(--card2);color:var(--dim);border:1.5px solid var(--border2);border-radius:var(--r);font-family:'Oswald',sans-serif;font-weight:600;font-size:14px;cursor:pointer;margin-top:10px;transition:all .14s;user-select:none;}
+.btn-secondary:active{background:var(--border);color:var(--chalk);}
+.btn-danger{width:100%;padding:13px;background:rgba(193,85,74,.12);color:var(--red);border:1.5px solid rgba(193,85,74,.3);border-radius:var(--r);font-family:'Oswald',sans-serif;font-weight:600;font-size:14px;cursor:pointer;margin-top:10px;transition:all .14s;user-select:none;}
+
+/* ===== CARDS & LISTS ===== */
+.card{background:var(--card);border:1.5px solid var(--border2);border-radius:var(--r);padding:16px;}
+.list-item{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px dashed var(--border2);}
+.list-item:last-child{border-bottom:none;}
+.chip-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+.chip{padding:8px 16px;border-radius:999px;background:var(--card2);border:1.5px solid var(--border2);color:var(--dim);font-family:'Oswald',sans-serif;font-size:13px;cursor:pointer;transition:all .14s;user-select:none;}
+.chip:active,.chip.sel{background:var(--gold);border-color:var(--gold);color:var(--bg);font-weight:600;}
+
+/* ===== ACTIVE MINI-CARD ===== */
+.active-mini{background:var(--card);border:2px solid var(--gold);border-radius:var(--r);padding:0;overflow:hidden;margin-top:6px;}
+.active-mini-top{background:linear-gradient(135deg,rgba(193,127,62,.15),transparent);padding:16px 18px 12px;}
+.am-row{display:flex;align-items:center;justify-content:space-between;}
+.am-op{font-family:'Oswald',sans-serif;font-size:13px;color:var(--gold);letter-spacing:.1em;text-transform:uppercase;}
+.am-talla{font-family:'Oswald',sans-serif;font-size:18px;margin-top:2px;}
+.am-count{font-family:'Space Mono',monospace;font-size:42px;font-weight:700;line-height:1;color:var(--chalk);}
+.am-meta{font-family:'Space Mono',monospace;font-size:14px;color:var(--dim);}
+.am-track{height:6px;background:var(--card2);border-radius:3px;margin:10px 18px 0;overflow:hidden;}
+.am-fill{height:100%;background:linear-gradient(90deg,var(--gold-dim),var(--gold));border-radius:3px;transition:width .3s;}
+.am-actions{display:flex;gap:0;border-top:1.5px solid var(--border2);}
+.am-btn{flex:1;background:transparent;border:none;padding:14px 0;font-family:'Oswald',sans-serif;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:.04em;}
+.am-btn-main{color:var(--gold);}
+.am-btn-pause{color:var(--dim);border-left:1px solid var(--border2);}
+
+/* ===== NAV ===== */
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1.5px solid var(--border);display:flex;z-index:10;padding-bottom:env(safe-area-inset-bottom,0px);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);}
+nav button{flex:1;background:none;border:none;color:var(--faint);padding:12px 0 10px;font-family:'Oswald',sans-serif;font-size:10px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;transition:color .15s;position:relative;}
+nav button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;}
+nav button.active{color:var(--gold);}
+.nav-dot{position:absolute;top:10px;right:calc(50% - 16px);width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 2px var(--gold-glow);display:none;}
+
+/* ===== MODAL ===== */
+#counter-modal{
+  position:fixed; inset:0; z-index:50; background:var(--bg);
+  display:flex; flex-direction:column; transform:translateY(100%);
+  transition:transform .32s cubic-bezier(.22,.85,.36,1);
+}
+#counter-modal.open{transform:translateY(0);}
+.modal-hdr{display:flex; align-items:center; justify-content:space-between; padding:14px 18px 10px; border-bottom:1px solid var(--border); flex-shrink:0;}
+.modal-back{background:var(--card2); border:1.5px solid var(--border2); color:var(--dim); border-radius:var(--rs); padding:8px 14px; font-family:'Oswald',sans-serif; font-size:13px; cursor:pointer;}
+.modal-op-info{text-align:center;}
+#m-op{font-family:'Oswald',sans-serif;font-size:12px;color:var(--gold);letter-spacing:.12em;text-transform:uppercase;}
+#m-talla{font-family:'Oswald',sans-serif;font-size:16px;color:var(--chalk);margin-top:1px;}
+.modal-body{flex:1; overflow-y:auto; padding:20px 20px 0; -webkit-overflow-scrolling:touch;}
+.m-count{font-family:'Space Mono',monospace; font-size:80px; font-weight:700; line-height:1; color:var(--chalk); text-align:center; transition:transform .1s;}
+.m-count.bump{animation:bump .18s ease;}
+@keyframes bump{0%{transform:scale(1)}50%{transform:scale(1.08)}100%{transform:scale(1)}}
+.m-meta{font-family:'Space Mono',monospace;font-size:20px;color:var(--dim);margin-top:2px;text-align:center;}
+.m-progress{height:8px;border-radius:4px;background:var(--card2);margin:14px 0;overflow:hidden;}
+.m-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--gold-dim),var(--gold));transition:width .35s ease;}
+.m-chart-wrap{background:var(--card2);border-radius:var(--rs);padding:10px;margin-bottom:20px;position:relative;}
+.m-chart-lbl{position:absolute;top:12px;left:14px;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;}
+#m-main-btn{width:100%; height:90px; background:var(--gold); color:var(--bg); border:none; border-radius:var(--r); font-family:'Oswald',sans-serif; font-weight:700; font-size:42px; cursor:pointer; box-shadow:0 8px 32px var(--gold-glow); transition:transform .08s;}
+#m-main-btn:active{transform:scale(.95);}
+#m-main-btn:disabled{background:var(--card2);color:var(--faint);box-shadow:none;}
+.m-sec-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;}
+.m-sec-btn{padding:14px 0; background:var(--card2); color:var(--dim); border:1.5px solid var(--border2); border-radius:var(--rs); font-family:'Oswald',sans-serif; font-weight:600; font-size:17px; cursor:pointer;}
+.modal-ftr{flex-shrink:0; padding:12px 16px; padding-bottom:calc(12px + env(safe-area-inset-bottom,0px)); border-top:1.5px solid var(--border); background:var(--card); display:flex; gap:10px;}
+.mf-btn{flex:1; padding:15px 0; border:none; border-radius:var(--rs); font-family:'Oswald',sans-serif; font-weight:700; font-size:13px; cursor:pointer;}
+.mf-pause{background:var(--card2);color:var(--dim);border:1.5px solid var(--border2);}
+.mf-end{background:rgba(193,85,74,.12);color:var(--red);border:1.5px solid rgba(193,85,74,.3);}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="brand"><span class="brand-dot"></span>AVANCE PRO</div>
+    <div class="brand-sub">Control por Cortes y Producciones</div>
+  </div>
+</header>
+<hr class="stitch">
+
+<main>
+
+<!-- ========== VISTA CORTES ========== -->
+<section id="view-cortes" class="view">
+  <div id="cortes-list"></div>
+  <button class="btn-primary" onclick="mostrarFormCorte()">+ Nuevo Corte de Producción</button>
+
+  <div id="form-corte" style="display:none; margin-top:24px;">
+    <div class="eyebrow">Crear Producción</div>
+    <label class="field-label">Nombre del Corte</label>
+    <input type="text" id="fc-nombre" placeholder="Ej. Lote Camisas Verano 2026">
+    
+    <label class="field-label" style="margin-top:20px;">Tallas del Corte</label>
+    <div id="fc-tallas-list"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-top:8px;">
+      <input type="text" id="fc-t-nom" placeholder="Talla (Ej. M)">
+      <input type="number" id="fc-t-cant" placeholder="Piezas" min="1">
+      <button class="btn-secondary" style="margin:0;padding:0 20px;" onclick="addTallaCorte()">+</button>
+    </div>
+
+    <label class="field-label" style="margin-top:20px;">Operaciones a realizar</label>
+    <div id="fc-ops-list"></div>
+    <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;margin-top:8px;">
+      <input type="text" id="fc-o-nom" placeholder="Ej. Pinzas, Bolsillos, Cierres...">
+      <select id="fc-o-tipo" style="padding:13px 26px 13px 10px;font-size:13px;">
+        <option value="porTalla">Por Talla</option>
+        <option value="global">Global (Todo)</option>
+      </select>
+      <button class="btn-secondary" style="margin:0;padding:0 20px;" onclick="addOpCorte()">+</button>
+    </div>
+
+    <button class="btn-primary" onclick="guardarCorte()" style="margin-top:30px;">Guardar Corte</button>
+    <button class="btn-secondary" onclick="cancelarCorte()">Cancelar</button>
+  </div>
+</section>
+
+<!-- ========== VISTA REGISTRO ========== -->
+<section id="view-registro" class="view active">
+  <div id="active-mini-card" style="display:none;">
+    <div class="eyebrow">Contador activo</div>
+    <div class="active-mini">
+      <div class="active-mini-top">
+        <div class="am-op" id="amc-op">—</div>
+        <div class="am-row" style="margin-top:4px;">
+          <div><div class="am-talla" id="amc-talla">—</div><div class="am-meta" id="amc-meta">— / —</div></div>
+          <div class="am-count" id="amc-count">0</div>
+        </div>
+      </div>
+      <div class="am-track"><div class="am-fill" id="amc-fill" style="width:0%"></div></div>
+      <div class="am-actions">
+        <button class="am-btn am-btn-main" onclick="openModal()">▶ Continuar</button>
+        <button class="am-btn am-btn-pause" onclick="pausarSesion()">⏸ Pausar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="new-session-form">
+    <div class="eyebrow">Iniciar Trabajo</div>
+    
+    <label class="field-label">Selecciona el Corte</label>
+    <select id="in-corte" onchange="actualizarOpsRegistro()">
+      <option value="">-- Elige un corte activo --</option>
+    </select>
+
+    <div id="in-ops-container" style="display:none;margin-top:16px;">
+      <label class="field-label">Operación</label>
+      <div class="chip-row" id="in-ops-chips"></div>
+    </div>
+
+    <div id="in-tallas-container" style="display:none;margin-top:16px;">
+      <label class="field-label">Talla a trabajar</label>
+      <div class="chip-row" id="in-tallas-chips"></div>
+    </div>
+
+    <div id="in-meta-preview" style="margin-top:20px;display:none;background:rgba(193,127,62,.08);padding:14px;border-radius:var(--rs);border:1px solid rgba(193,127,62,.2);">
+      <div style="font-size:12px;color:var(--gold);text-transform:uppercase;letter-spacing:.05em;">Meta asignada</div>
+      <div style="font-family:'Space Mono',monospace;font-size:24px;font-weight:700;color:var(--chalk);margin-top:4px;" id="in-meta-val">0 piezas</div>
+    </div>
+
+    <button class="btn-primary" id="btn-iniciar" style="display:none;" onclick="iniciarSesion()">▶ Iniciar</button>
+  </div>
+
+  <div id="lista-pausadas" style="display:none;margin-top:24px;">
+    <div class="eyebrow" style="color:var(--chalk);">En Pausa</div>
+    <div id="lp-content"></div>
+  </div>
+
+  <div id="lista-completadas" style="display:none;margin-top:24px;">
+    <div class="eyebrow" style="color:var(--green);">Completadas Recientemente</div>
+    <div id="lc-content"></div>
+  </div>
+</section>
+
+<!-- ========== VISTA DASHBOARD ========== -->
+<section id="view-dashboard" class="view">
+  <div id="dash-corte-eta" style="margin-bottom:20px;"></div>
+  <div class="chart-card">
+    <h4 style="margin:0 0 10px;font-family:'Oswald',sans-serif;font-size:14px;color:var(--dim);text-transform:uppercase;">Avance de Hoy</h4>
+    <div style="font-family:'Space Mono',monospace;font-size:32px;font-weight:700;color:var(--gold);" id="st-hoy">0 <span style="font-size:14px;color:var(--dim);">pzs</span></div>
+  </div>
+
+  <div class="chart-card" style="margin-top:24px;border-color:var(--border);">
+    <h4 style="color:var(--chalk);margin-bottom:6px;">Respaldo de Datos</h4>
+    <div style="font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.4;">Usa esta opción para migrar tu historial entre la versión de la computadora y la versión de internet.</div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn-secondary" style="margin:0;" onclick="exportarDatos()">📥 Exportar</button>
+      <button class="btn-secondary" style="margin:0;" onclick="document.getElementById('import-file').click()">📤 Importar</button>
+      <input type="file" id="import-file" style="display:none;" accept=".json" onchange="importarDatos(event)">
+    </div>
+  </div>
+</section>
+
+<!-- ========== VISTA ANALÍTICA CORTE ========== -->
+<section id="view-corte-detalle" class="view">
+  <button class="btn-secondary" style="margin-top:0;margin-bottom:20px;padding:10px;width:auto;" onclick="goTo('cortes')">‹ Volver a Cortes</button>
+  
+  <div style="font-family:'Oswald',sans-serif;font-size:24px;color:var(--gold);" id="ad-nombre">Corte</div>
+  <div style="font-size:13px;color:var(--dim);margin-bottom:24px;" id="ad-sub">Detalle analítico</div>
+
+  <div class="chart-card">
+    <h4>Avance Global</h4>
+    <div style="position:relative;height:200px;"><canvas id="c-dona"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <h4>Rendimiento por Día y Hora</h4>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:10px;">Piezas producidas en cada bloque horario</div>
+    <div style="position:relative;height:220px;"><canvas id="c-horas"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <h4>Velocidad por Operación</h4>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:10px;">Piezas por hora (pzs/hr) - Más largo es más rápido</div>
+    <div style="position:relative;height:220px;"><canvas id="c-ops"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <h4>Curva de Tiempo por Pieza</h4>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:10px;">Segundos que te toma 1 pieza en cada hora. ¡Picos altos significan cansancio o lentitud!</div>
+    <div style="position:relative;height:220px;"><canvas id="c-cansancio"></canvas></div>
+  </div>
+</section>
+
+</main>
+
+<nav>
+  <button id="nav-cortes" onclick="goTo('cortes')"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h7"/></svg>Cortes</button>
+  <button id="nav-registro" class="active" onclick="goTo('registro')">
+    <span class="nav-dot" id="nav-dot-registro"></span>
+    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Registro
+  </button>
+  <button id="nav-dashboard" onclick="goTo('dashboard')"><svg viewBox="0 0 24 24"><path d="M4 19V9M11 19V5M18 19v-7"/></svg>Dashboard</button>
+</nav>
+
+<!-- MODAL CONTADOR -->
+<div id="counter-modal">
+  <div class="modal-hdr">
+    <button class="modal-back" onclick="closeModal()">‹ Volver</button>
+    <div class="modal-op-info"><div id="m-op">—</div><div id="m-talla">—</div></div>
+    <div class="modal-hdr-right"></div>
+  </div>
+  <div class="modal-body">
+    <div id="m-counting">
+      <!-- Chart.js Canvas -->
+      <div class="m-chart-wrap">
+        <div class="m-chart-lbl">Pzs vs Tiempo (min)</div>
+        <canvas id="m-chart" height="150"></canvas>
+      </div>
+
+      <div class="m-count" id="m-count">0</div>
+      <div class="m-meta" id="m-meta">/ 0</div>
+      <div class="m-progress"><div class="m-fill" id="m-fill" style="width:0%"></div></div>
+      
+      <button id="m-main-btn">+10</button>
+      <div class="m-sec-row">
+        <button class="m-sec-btn" id="m-sec5">+5</button>
+        <button class="m-sec-btn" id="m-sec20">+20</button>
+        <button class="m-sec-btn" id="m-manual">✏️</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal-ftr">
+    <button class="mf-btn mf-pause" onclick="pausarSesion()">⏸ Pausar</button>
+    <button class="mf-btn mf-end" onclick="forzarTermino()">⚡ Forzar Término</button>
+  </div>
+</div>
+
+<!-- MODAL RESULTADO DE OPERACIÓN -->
+<div id="result-modal" style="position:fixed;inset:0;z-index:60;background:rgba(15,24,33,0.85);display:none;align-items:center;justify-content:center;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);padding:20px;">
+  <div style="background:var(--card);border:1.5px solid var(--border2);border-radius:var(--r);width:100%;max-width:400px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.5);transform:scale(0.9);opacity:0;transition:all 0.2s;" id="rm-box">
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:40px;margin-bottom:10px;">🏆</div>
+      <div style="font-family:'Oswald',sans-serif;font-size:22px;color:var(--gold);" id="rm-op">Operación</div>
+      <div style="font-size:13px;color:var(--dim);" id="rm-talla">Talla</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+      <div style="background:var(--card2);border-radius:var(--rs);padding:12px;text-align:center;">
+        <div style="font-family:'Space Mono',monospace;font-size:24px;font-weight:700;color:var(--chalk);" id="rm-pzs">0</div>
+        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;">Piezas hechas</div>
+      </div>
+      <div style="background:var(--card2);border-radius:var(--rs);padding:12px;text-align:center;">
+        <div style="font-family:'Space Mono',monospace;font-size:24px;font-weight:700;color:var(--chalk);" id="rm-tiempo">0m</div>
+        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;">Tiempo invertido</div>
+      </div>
+      <div style="background:var(--card2);border-radius:var(--rs);padding:12px;text-align:center;grid-column:span 2;">
+        <div style="font-family:'Space Mono',monospace;font-size:28px;font-weight:700;color:var(--gold);" id="rm-ritmo">0</div>
+        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;">Velocidad Promedio (pzs/hr)</div>
+      </div>
+    </div>
+    <button class="btn-primary" style="margin-top:0;" onclick="cerrarResultado()">Cerrar</button>
+  </div>
+</div>
+
+<script>
+/* ESTADO */
+const KEY = 'avance_pro_v1';
+function loadState(){
+  try{ 
+    const v1=localStorage.getItem(KEY); 
+    let stateV1 = v1 ? JSON.parse(v1) : null;
+    
+    // Si ya existe la key nueva y tiene datos, retornarla
+    if(stateV1 && stateV1.cortes && stateV1.cortes.length > 0) {
+      return stateV1;
+    }
+    
+    // Si no existe o está vacía, intentamos migrar desde avance_v3
+    const v3=localStorage.getItem('avance_v3');
+    if(v3){
+      const old = JSON.parse(v3);
+      if((old.sesiones && old.sesiones.length > 0) || (old.registros && old.registros.length > 0)) {
+        const state = {
+          cortes: [{
+            id: 'corte_legado',
+            nombre: 'Producción Anterior (Importada)',
+            tallas: [],
+            operaciones: (old.operaciones||[]).map(o=>({nombre: o.nombre, porTalla: true})),
+            ts: Date.now()
+          }],
+          sesiones: (old.sesiones||[]).map(s=>({...s, corteId: 'corte_legado'})),
+          registros: old.registros||[]
+        };
+        localStorage.setItem(KEY, JSON.stringify(state));
+        return state;
+      }
+    }
+    // Si hay un v1 vacío y no hay nada que migrar, retornar v1
+    if(stateV1) return stateV1;
+    
+  }catch(e){
+    console.error(e);
+  }
+  return { cortes:[], sesiones:[], registros:[] };
+}
+function saveState(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+function uid(){ return 'x'+Math.random().toString(36).slice(2,10); }
+
+let state = loadState();
+let formTemp = { tallas:[], operaciones:[] };
+let editingCorteId = null;
+let chartObj = null;
+
+// UI Transitorio
+let selCorteId=null, selOp=null, selTalla=null;
+
+/* ======== CORTES (PRODUCCIONES) ======== */
+function renderCortes(){
+  const list = document.getElementById('cortes-list');
+  list.innerHTML='';
+  if(!state.cortes.length){
+    list.innerHTML='<div style="color:var(--dim);text-align:center;padding:40px 0;">No hay cortes activos. Crea uno para empezar.</div>';
+    return;
+  }
+  state.cortes.forEach(c=>{
+    const totalPzs = c.tallas.reduce((s,t)=>s+t.cantidad,0);
+    list.innerHTML+=`
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-family:'Oswald',sans-serif;font-size:18px;color:var(--gold);">${c.nombre}</div>
+            <div style="font-size:12px;color:var(--dim);margin-top:4px;">${c.tallas.length} tallas · ${c.operaciones.length} ops · Total: ${totalPzs} pzs</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <button class="btn-secondary" style="width:auto;margin:0;padding:6px 12px;font-size:12px;" onclick="editarCorte('${c.id}')">✏️ Editar</button>
+            <button class="btn-secondary" style="width:auto;margin:0;padding:6px 12px;font-size:12px;border-color:var(--gold);color:var(--gold);" onclick="abrirAnalitica('${c.id}')">📊 Analítica</button>
+          </div>
+        </div>
+      </div>`;
+  });
+}
+function mostrarFormCorte(){ 
+  editingCorteId = null;
+  document.getElementById('form-corte').style.display='block'; 
+  document.getElementById('fc-nombre').value='';
+  formTemp={tallas:[],operaciones:[]}; 
+  renderFormTemp(); 
+}
+function editarCorte(id){
+  const c = state.cortes.find(x=>x.id===id);
+  if(!c) return;
+  editingCorteId = id;
+  document.getElementById('form-corte').style.display='block';
+  document.getElementById('fc-nombre').value=c.nombre;
+  // clonar profunda para no editar el estado directo sin guardar
+  formTemp = {
+    tallas: c.tallas.map(t=>({...t})),
+    operaciones: c.operaciones.map(o=>({...o}))
+  };
+  renderFormTemp();
+}
+function cancelarCorte(){ document.getElementById('form-corte').style.display='none'; }
+function addTallaCorte(){
+  const n=document.getElementById('fc-t-nom').value.trim();
+  const c=parseInt(document.getElementById('fc-t-cant').value,10);
+  if(!n||isNaN(c)||c<=0)return;
+  formTemp.tallas.push({nombre:n,cantidad:c});
+  document.getElementById('fc-t-nom').value=''; document.getElementById('fc-t-cant').value='';
+  renderFormTemp();
+}
+function addOpCorte(){
+  const n=document.getElementById('fc-o-nom').value.trim();
+  const tipo=document.getElementById('fc-o-tipo').value;
+  if(!n)return;
+  formTemp.operaciones.push({nombre:n,porTalla:tipo==='porTalla'});
+  document.getElementById('fc-o-nom').value='';
+  renderFormTemp();
+}
+function renderFormTemp(){
+  const tl=document.getElementById('fc-tallas-list');
+  tl.innerHTML = formTemp.tallas.map((t,i)=>`<div class="list-item"><span>Talla ${t.nombre}</span><div style="display:flex;align-items:center;gap:10px;"><span style="font-family:'Space Mono',monospace">${t.cantidad} pzs</span><button style="background:transparent;border:none;color:var(--red);cursor:pointer;padding:4px;" onclick="quitarTalla(${i})">✕</button></div></div>`).join('');
+  const ol=document.getElementById('fc-ops-list');
+  ol.innerHTML = formTemp.operaciones.map((o,i)=>`<div class="list-item"><span>${o.nombre}</span><div style="display:flex;align-items:center;gap:10px;"><span style="font-size:10px;color:var(--gold);text-transform:uppercase">${o.porTalla?'Por Talla':'Global'}</span><button style="background:transparent;border:none;color:var(--red);cursor:pointer;padding:4px;" onclick="quitarOp(${i})">✕</button></div></div>`).join('');
+}
+function quitarTalla(i){ formTemp.tallas.splice(i,1); renderFormTemp(); }
+function quitarOp(i){ formTemp.operaciones.splice(i,1); renderFormTemp(); }
+
+function guardarCorte(){
+  const n=document.getElementById('fc-nombre').value.trim();
+  if(!n || !formTemp.tallas.length || !formTemp.operaciones.length){ alert('Faltan datos del corte. Asegúrate de tener un nombre, al menos una talla y una operación.'); return; }
+  
+  if(editingCorteId){
+    const idx = state.cortes.findIndex(c=>c.id===editingCorteId);
+    if(idx>-1){
+      state.cortes[idx].nombre = n;
+      state.cortes[idx].tallas = formTemp.tallas;
+      state.cortes[idx].operaciones = formTemp.operaciones;
+    }
+  } else {
+    state.cortes.push({id:uid(), nombre:n, tallas:formTemp.tallas, operaciones:formTemp.operaciones, ts:Date.now()});
+  }
+  
+  saveState(); cancelarCorte(); renderCortes();
+}
+
+/* ======== REGISTRO E INICIO ======== */
+function getActiva(){ return state.sesiones.find(s=>s.estado==='activa'); }
+function piezasHechas(id){ return state.registros.filter(r=>r.sesionId===id).reduce((s,r)=>s+r.cantidad,0); }
+
+function renderRegistro(){
+  const activa = getActiva();
+  const mc = document.getElementById('active-mini-card');
+  const form = document.getElementById('new-session-form');
+  document.getElementById('nav-dot-registro').style.display=activa?'block':'none';
+  
+  if(activa){
+    mc.style.display='block'; 
+    form.style.display='none';
+    const h=piezasHechas(activa.id), pct=activa.meta>0 ? (h/activa.meta)*100 : 0;
+    document.getElementById('amc-op').textContent = activa.opNombre;
+    document.getElementById('amc-talla').textContent = activa.talla ? 'Talla '+activa.talla : 'Global';
+    document.getElementById('amc-count').textContent = h;
+    document.getElementById('amc-meta').textContent = h+' / '+activa.meta+' pzs';
+    document.getElementById('amc-fill').style.width = Math.min(100,pct)+'%';
+  } else {
+    mc.style.display='none'; 
+    form.style.display='block';
+    const sel = document.getElementById('in-corte');
+    
+    if(state.cortes.length === 0){
+      sel.innerHTML='<option value="">-- No hay cortes creados --</option>';
+    } else {
+      sel.innerHTML='<option value="">-- Elige un corte activo --</option>' + state.cortes.map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
+    }
+    
+    document.getElementById('in-ops-container').style.display='none';
+    document.getElementById('in-tallas-container').style.display='none';
+    document.getElementById('in-meta-preview').style.display='none';
+    document.getElementById('btn-iniciar').style.display='none';
+  }
+  
+  renderPausedAndCompleted();
+}
+
+function renderPausedAndCompleted(){
+  // Tareas pausadas
+  const pausadas = state.sesiones.filter(s=>s.estado==='pausada');
+  const divPausadas = document.getElementById('lista-pausadas');
+  if(pausadas.length>0) {
+     divPausadas.style.display = 'block';
+     document.getElementById('lp-content').innerHTML = pausadas.map(p => `
+       <div class="card" style="margin-bottom:10px;border-color:var(--dim);">
+         <div style="display:flex;justify-content:space-between;align-items:center;">
+           <div>
+             <div style="font-family:'Oswald',sans-serif;color:var(--chalk);font-size:16px;">${p.opNombre}</div>
+             <div style="font-size:12px;color:var(--dim);">${p.talla?'Talla '+p.talla:'Global'} - Llevas ${piezasHechas(p.id)} de ${p.meta} pzs</div>
+           </div>
+           <button class="btn-secondary" style="width:auto;margin:0;padding:8px 14px;color:var(--gold);border-color:var(--gold);" onclick="reanudarSesion('${p.id}')">▶ Reanudar</button>
+         </div>
+       </div>
+     `).join('');
+  } else {
+     divPausadas.style.display = 'none';
+  }
+
+  // Tareas completadas recientemente
+  const completadas = state.sesiones.filter(s=>s.estado==='completa').sort((a,b)=>b.finTs - a.finTs).slice(0, 5);
+  const divCompletadas = document.getElementById('lista-completadas');
+  if(completadas.length>0){
+     divCompletadas.style.display = 'block';
+     document.getElementById('lc-content').innerHTML = completadas.map(c => {
+       const h = piezasHechas(c.id);
+       return `
+       <div class="card" style="margin-bottom:10px;border-color:var(--green);background:rgba(90,159,116,0.05);">
+         <div style="display:flex;justify-content:space-between;align-items:center;">
+           <div>
+             <div style="font-family:'Oswald',sans-serif;color:var(--green);font-size:16px;">${c.opNombre}</div>
+             <div style="font-size:12px;color:var(--dim);">${c.talla?'Talla '+c.talla:'Global'} - Completada (${h} pzs)</div>
+           </div>
+           <button class="btn-secondary" style="width:auto;margin:0;padding:8px 14px;" onclick="verResultado('${c.id}')">Ver resultado</button>
+         </div>
+       </div>
+       `
+     }).join('');
+  } else {
+     divCompletadas.style.display = 'none';
+  }
+}
+
+function reanudarSesion(id){
+  const activa = getActiva();
+  if(activa){ activa.estado = 'pausada'; }
+  const s = state.sesiones.find(x=>x.id===id);
+  if(s){
+    s.estado = 'activa';
+    saveState();
+    openModal();
+  }
+}
+
+function verResultado(id){
+  const s = state.sesiones.find(x=>x.id===id);
+  if(!s) return;
+  const h = piezasHechas(s.id);
+  const regs = state.registros.filter(r=>r.sesionId===s.id);
+  const t = regs.reduce((a,r)=>a+r.duracionSeg,0);
+  const rate = t>0 ? Math.round(h/(t/3600)) : 0;
+  
+  let hFormated = t+'s';
+  if(t>60){
+    const m = Math.floor(t/60);
+    hFormated = m>60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
+  }
+  
+  document.getElementById('rm-op').textContent = s.opNombre;
+  document.getElementById('rm-talla').textContent = s.talla ? 'Talla ' + s.talla : 'Global';
+  document.getElementById('rm-pzs').textContent = h;
+  document.getElementById('rm-tiempo').textContent = hFormated;
+  document.getElementById('rm-ritmo').textContent = rate;
+  
+  const modal = document.getElementById('result-modal');
+  modal.style.display = 'flex';
+  setTimeout(()=>{
+    document.getElementById('rm-box').style.transform = 'scale(1)';
+    document.getElementById('rm-box').style.opacity = '1';
+  },10);
+}
+
+function cerrarResultado(){
+  document.getElementById('rm-box').style.transform = 'scale(0.9)';
+  document.getElementById('rm-box').style.opacity = '0';
+  setTimeout(()=>{
+    document.getElementById('result-modal').style.display = 'none';
+  },200);
+}
+
+function actualizarOpsRegistro(){
+  selCorteId=document.getElementById('in-corte').value;
+  selOp=null; selTalla=null;
+  const c = state.cortes.find(x=>x.id===selCorteId);
+  const cont = document.getElementById('in-ops-container');
+  
+  document.getElementById('in-tallas-container').style.display='none';
+  document.getElementById('in-meta-preview').style.display='none';
+  document.getElementById('btn-iniciar').style.display='none';
+
+  if(!c){ 
+    cont.style.display='none'; 
+    return; 
+  }
+  
+  cont.style.display='block';
+  if(c.operaciones.length === 0) {
+    document.getElementById('in-ops-chips').innerHTML = '<div style="font-size:12px;color:var(--dim);margin-top:4px;">No has configurado operaciones en este corte. Ve a editarlo en la pestaña Cortes.</div>';
+  } else {
+    document.getElementById('in-ops-chips').innerHTML = c.operaciones.map(o=>`<div class="chip" onclick="seleccionarOp('${o.nombre}',${o.porTalla})">${o.nombre}</div>`).join('');
+  }
+}
+function seleccionarOp(nombre, porTalla){
+  selOp = {nombre, porTalla};
+  const chips = document.getElementById('in-ops-chips').querySelectorAll('.chip');
+  chips.forEach(c=>{ c.classList.toggle('sel', c.textContent===nombre); });
+  const c = state.cortes.find(x=>x.id===selCorteId);
+  
+  if(porTalla){
+    document.getElementById('in-tallas-container').style.display='block';
+    document.getElementById('in-meta-preview').style.display='none';
+    document.getElementById('btn-iniciar').style.display='none';
+    
+    if(c.tallas.length === 0){
+      document.getElementById('in-tallas-chips').innerHTML = '<div style="font-size:12px;color:var(--red);margin-top:4px;">⚠️ Este corte no tiene tallas configuradas. Ve a la pestaña "Cortes", edítalo y agrega las tallas.</div>';
+    } else {
+      document.getElementById('in-tallas-chips').innerHTML = c.tallas.map(t=>`<div class="chip" onclick="seleccionarTalla('${t.nombre}',${t.cantidad})">${t.nombre}</div>`).join('');
+    }
+  } else {
+    document.getElementById('in-tallas-container').style.display='none';
+    const total = c.tallas.reduce((s,t)=>s+t.cantidad,0);
+    if(total === 0) {
+      alert('⚠️ Este corte no tiene tallas ni piezas configuradas. Ve a la pestaña Cortes y edítalo para agregar cantidades.');
+      return;
+    }
+    seleccionarTalla(null, total);
+  }
+}
+function seleccionarTalla(nombre, cantidad){
+  selTalla = {nombre, cantidad};
+  if(nombre){
+    const chips = document.getElementById('in-tallas-chips').querySelectorAll('.chip');
+    chips.forEach(c=>{ c.classList.toggle('sel', c.textContent===nombre); });
+  }
+  document.getElementById('in-meta-preview').style.display='block';
+  document.getElementById('in-meta-val').textContent = cantidad + ' piezas';
+  document.getElementById('btn-iniciar').style.display='block';
+}
+function iniciarSesion(){
+  if(!selCorteId || !selOp || !selTalla) return;
+  const s = {
+    id:uid(), corteId:selCorteId, opNombre:selOp.nombre, talla:selTalla.nombre,
+    meta:selTalla.cantidad, estado:'activa', inicioTs:Date.now()
+  };
+  state.sesiones.push(s); saveState(); openModal();
+}
+
+/* ======== MODAL Y GRÁFICOS ======== */
+function openModal(){ document.getElementById('counter-modal').classList.add('open'); renderModal(); }
+function closeModal(){ document.getElementById('counter-modal').classList.remove('open'); renderRegistro(); }
+function pausarSesion(){ const s=getActiva(); if(s){ s.estado='pausada'; saveState(); } closeModal(); }
+
+function renderModal(){
+  const s = getActiva(); if(!s){ closeModal(); return; }
+  document.getElementById('m-op').textContent=s.opNombre;
+  document.getElementById('m-talla').textContent=s.talla?'Talla '+s.talla:'Global';
+  const h=piezasHechas(s.id), rest=s.meta-h, pct=(h/s.meta)*100;
+  document.getElementById('m-count').textContent=h;
+  document.getElementById('m-meta').textContent='/ '+s.meta;
+  document.getElementById('m-fill').style.width=Math.min(100,pct)+'%';
+  
+  const cap10=Math.min(10,rest), cap5=Math.min(5,rest), cap20=Math.min(20,rest);
+  const b10=document.getElementById('m-main-btn'); b10.textContent=rest<=0?'✓':'+'+cap10; b10.disabled=rest<=0; b10.onclick=()=>registrarLote(cap10);
+  const b5=document.getElementById('m-sec5'); b5.textContent=rest>=5?'+5':(rest>0?'+'+rest:'✓'); b5.disabled=rest<=0; b5.onclick=()=>registrarLote(cap5);
+  const b20=document.getElementById('m-sec20'); b20.textContent=rest>=20?'+20':(rest>0?'+'+rest:'✓'); b20.disabled=rest<=0; b20.onclick=()=>registrarLote(cap20);
+  document.getElementById('m-manual').onclick=()=>registrarLote(parseInt(prompt(`Piezas (quedan ${rest}):`),10)||0);
+  
+  actualizarGrafico(s);
+}
+
+function registrarLote(cant){
+  const s=getActiva(); if(!s||cant<=0)return;
+  const h=piezasHechas(s.id), rest=s.meta-h, c=Math.min(cant,rest);
+  if(c<=0)return;
+  const regs=state.registros.filter(r=>r.sesionId===s.id).sort((a,b)=>a.ts-b.ts);
+  const lastTs=regs.length?regs[regs.length-1].ts:s.inicioTs;
+  const now=Date.now(), durSeg=Math.max(1,Math.round((now-lastTs)/1000));
+  state.registros.push({id:uid(), sesionId:s.id, ts:now, cantidad:c, duracionSeg:durSeg});
+  if(h+c>=s.meta){ s.estado='completa'; s.finTs=now; setTimeout(()=>{alert('¡Talla completada!');closeModal();},300); }
+  saveState();
+  const el=document.getElementById('m-count'); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+  renderModal();
+}
+
+function forzarTermino(){
+  const s=getActiva(); if(!s)return;
+  const h=piezasHechas(s.id), rest=s.meta-h;
+  if(rest<=0)return;
+  if(!confirm(`¿Forzar término?\nSe autocompletarán ${rest} piezas usando tu tiempo promedio.`))return;
+  
+  // Calcular avg time/pieza
+  const regs=state.registros.filter(r=>r.sesionId===s.id);
+  let avgSeg=60; // default si no hay datos
+  if(regs.length){ const totP=regs.reduce((a,r)=>a+r.cantidad,0), totT=regs.reduce((a,r)=>a+r.duracionSeg,0); if(totP>0) avgSeg=totT/totP; }
+  
+  const now=Date.now();
+  state.registros.push({id:uid(), sesionId:s.id, ts:now, cantidad:rest, duracionSeg:Math.round(rest*avgSeg)});
+  s.estado='completa'; s.finTs=now; saveState();
+  alert('Cierre forzado. Datos promedio generados.'); closeModal();
+}
+
+function actualizarGrafico(sActiva){
+  const ctx = document.getElementById('m-chart').getContext('2d');
+  
+  // Extraer datos de la sesión actual
+  const regsAct = state.registros.filter(r=>r.sesionId===sActiva.id).sort((a,b)=>a.ts-b.ts);
+  const dataAct = [{x:0, y:0}];
+  let acumP=0, acumT=0;
+  regsAct.forEach(r=>{ acumP+=r.cantidad; acumT+=r.duracionSeg; dataAct.push({x:acumT/60, y:acumP}); }); // X en mins
+
+  // Extraer datos de sesiones anteriores de la MISMA OPERACIÓN
+  const prevSes = state.sesiones.filter(x=>x.opNombre===sActiva.opNombre && x.estado==='completa');
+  const datasets = [{
+    label: 'Talla Actual', data: dataAct,
+    borderColor:'#c17f3e', backgroundColor:'rgba(193,127,62,0.1)',
+    borderWidth:3, fill:true, tension:0.1, zIndex:10
+  }];
+
+  prevSes.forEach((ps,i)=>{
+    const regs = state.registros.filter(r=>r.sesionId===ps.id).sort((a,b)=>a.ts-b.ts);
+    const dt = [{x:0,y:0}]; let ap=0, at=0;
+    regs.forEach(r=>{ ap+=r.cantidad; at+=r.duracionSeg; dt.push({x:at/60,y:ap}); });
+    datasets.push({
+      label: 'Talla '+ps.talla, data: dt,
+      borderColor:'rgba(168,178,189,0.3)', borderWidth:1.5, fill:false, tension:0.1,
+      pointRadius:0, zIndex:1
+    });
+  });
+
+  if(chartObj) chartObj.destroy();
+  chartObj = new Chart(ctx, {
+    type:'line', data:{datasets},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{enabled:false}},
+      scales:{
+        x:{type:'linear', beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#a8b2bd'}},
+        y:{beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#a8b2bd'}}
+      }
+    }
+  });
+}
+
+/* ======== DASHBOARD & ETA ======== */
+function renderDashboard(){
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const regsH=state.registros.filter(r=>r.ts>=hoy.getTime());
+  document.getElementById('st-hoy').innerHTML = regsH.reduce((a,r)=>a+r.cantidad,0) + ' <span style="font-size:14px;color:var(--dim);">pzs</span>';
+  
+  // ETA del último corte activo
+  const etaBox=document.getElementById('dash-corte-eta');
+  if(!state.cortes.length){ etaBox.innerHTML=''; return; }
+  const c = state.cortes[state.cortes.length-1];
+  
+  let totalReq=0, totalHechas=0;
+  // Total requerido = sum(tallas) * ops_por_talla + sum(tallas) * ops_globales
+  const pzsPorCorte = c.tallas.reduce((a,t)=>a+t.cantidad,0);
+  totalReq = pzsPorCorte * c.operaciones.length;
+  
+  // Hechas en este corte
+  const sesCorte = state.sesiones.filter(s=>s.corteId===c.id);
+  sesCorte.forEach(s=>{ totalHechas += piezasHechas(s.id); });
+  const pend = totalReq - totalHechas;
+  
+  // Ritmo global (avg)
+  let ritmoGlobal=200; // pzs/hora default
+  if(state.registros.length>10){
+    const h = state.registros.reduce((a,r)=>a+r.duracionSeg,0)/3600;
+    const p = state.registros.reduce((a,r)=>a+r.cantidad,0);
+    if(h>0) ritmoGlobal = p/h;
+  }
+  
+  const horasFaltantes = pend/ritmoGlobal;
+  const diasFaltantes = (horasFaltantes/8).toFixed(1); // asumiendo 8h de jornada
+  const pct = totalReq>0 ? Math.min(100,(totalHechas/totalReq)*100).toFixed(0) : 0;
+  
+  etaBox.innerHTML=`
+    <div class="card" style="border-color:var(--gold);">
+      <div class="eyebrow" style="margin-top:0;">Proyección: ${c.nombre}</div>
+      <div style="font-family:'Space Mono';font-size:20px;font-weight:700;">${pct}% Completado</div>
+      <div style="font-size:12px;color:var(--dim);margin-top:4px;">Quedan ${pend} piezas totales.</div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border2);display:flex;justify-content:space-between;">
+        <span style="font-size:13px;color:var(--dim);">Tiempo estimado restante:</span>
+        <strong style="color:var(--gold);font-family:'Space Mono';">${diasFaltantes} días de trabajo</strong>
+      </div>
+    </div>`;
+}
+
+/* ======== ANALÍTICA DE CORTE ======== */
+let chartsAnalitica = [];
+function abrirAnalitica(id){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-corte-detalle').classList.add('active');
+  
+  const c = state.cortes.find(x=>x.id===id);
+  if(!c) return;
+  document.getElementById('ad-nombre').textContent = c.nombre;
+  
+  const sesionesCorte = state.sesiones.filter(s=>s.corteId===id || s.corteId==='corte_legado' && id==='corte_legado');
+  const regsCorte = state.registros.filter(r=> sesionesCorte.find(s=>s.id===r.sesionId));
+  
+  document.getElementById('ad-sub').textContent = `${regsCorte.length} registros analizados`;
+
+  // Limpiar gráficos anteriores
+  chartsAnalitica.forEach(ch => ch.destroy());
+  chartsAnalitica = [];
+  
+  // 1. DONA (Avance Global)
+  const pzsPorCorte = c.tallas.reduce((a,t)=>a+t.cantidad,0);
+  const totalReq = pzsPorCorte * c.operaciones.length;
+  const totalHechas = regsCorte.reduce((a,r)=>a+r.cantidad, 0);
+  const pendientes = Math.max(0, totalReq - totalHechas);
+  
+  chartsAnalitica.push(new Chart(document.getElementById('c-dona').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Completadas', 'Pendientes'],
+      datasets: [{
+        data: [totalHechas, pendientes],
+        backgroundColor: ['#c17f3e', '#243347'],
+        borderWidth: 0
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#a8b2bd' } } } }
+  }));
+
+  // Agrupaciones temporales para Horas y Cansancio
+  const hourlyAgg = {};
+  const opMap = {};
+  const cansancioAgg = {};
+  
+  regsCorte.forEach(r => {
+    // Para Horas y Cansancio
+    const d = new Date(r.ts);
+    d.setMinutes(0,0,0); // Truncar a la hora exacta
+    const ts = d.getTime();
+    
+    if(!hourlyAgg[ts]) hourlyAgg[ts] = 0;
+    hourlyAgg[ts] += r.cantidad;
+    
+    if(!cansancioAgg[ts]) cansancioAgg[ts] = { pzs:0, segs:0 };
+    cansancioAgg[ts].pzs += r.cantidad;
+    cansancioAgg[ts].segs += r.duracionSeg;
+    
+    // Para Operaciones
+    const s = sesionesCorte.find(x=>x.id===r.sesionId);
+    if(s){
+      if(!opMap[s.opNombre]) opMap[s.opNombre] = { pzs:0, segs:0 };
+      opMap[s.opNombre].pzs += r.cantidad;
+      opMap[s.opNombre].segs += r.duracionSeg;
+    }
+  });
+
+  // 2. BARRAS (Intensidad por Día+Hora)
+  const sortedHours = Object.keys(hourlyAgg).map(Number).sort();
+  const lblsHoras = sortedHours.map(ts => {
+     const d = new Date(ts);
+     const m = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][d.getMonth()];
+     return `${d.getDate()} ${m} - ${d.getHours()}:00`;
+  });
+  const dataHoras = sortedHours.map(ts => hourlyAgg[ts]);
+  
+  chartsAnalitica.push(new Chart(document.getElementById('c-horas').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: lblsHoras,
+      datasets: [{ label: 'Piezas logradas', data: dataHoras, backgroundColor: '#5a9f74', borderRadius: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { ticks: { color: '#a8b2bd', maxRotation: 45, minRotation: 45 } }, y: { beginAtZero: true, ticks: { color: '#a8b2bd' } } }
+    }
+  }));
+
+  // 3. BARRAS HORIZONTALES (Velocidad por Operación)
+  const opLabels = Object.keys(opMap);
+  const opData = opLabels.map(op => {
+     const p = opMap[op].pzs, s = opMap[op].segs;
+     return s > 0 ? Math.round(p / (s/3600)) : 0;
+  });
+  // Ordenar de más rápido a más lento para mejor visualización
+  const opsSorted = opLabels.map((lbl, i) => ({lbl, val: opData[i]})).sort((a,b) => b.val - a.val);
+  
+  chartsAnalitica.push(new Chart(document.getElementById('c-ops').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: opsSorted.map(o=>o.lbl),
+      datasets: [{ label: 'Pzs / Hora', data: opsSorted.map(o=>o.val), backgroundColor: '#c17f3e', borderRadius: 4 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, ticks: { color: '#a8b2bd' } }, y: { ticks: { color: '#a8b2bd' } } }
+    }
+  }));
+
+  // 4. LÍNEAS (Curva de Cansancio - Segundos por pieza)
+  const dataCansancio = sortedHours.map(ts => {
+    const p = cansancioAgg[ts].pzs, s = cansancioAgg[ts].segs;
+    return p > 0 ? (s / p).toFixed(1) : 0; 
+  });
+  
+  chartsAnalitica.push(new Chart(document.getElementById('c-cansancio').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: lblsHoras,
+      datasets: [{
+        label: 'Segundos por pieza', data: dataCansancio, 
+        borderColor: '#c1554a', backgroundColor: 'rgba(193,85,74,0.1)',
+        borderWidth: 2, fill: true, tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { ticks: { display: false } }, y: { beginAtZero: true, ticks: { color: '#a8b2bd' } } }
+    }
+  }));
+}
+
+/* ======== RESPALDO DE DATOS ======== */
+function exportarDatos(){
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+  const dl = document.createElement('a');
+  dl.setAttribute("href", dataStr);
+  const dateStr = new Date().toISOString().split('T')[0];
+  dl.setAttribute("download", "avance_respaldo_" + dateStr + ".json");
+  document.body.appendChild(dl);
+  dl.click();
+  dl.remove();
+}
+function importarDatos(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    try {
+      const imported = JSON.parse(evt.target.result);
+      if(imported && imported.cortes && imported.sesiones) {
+        state = imported;
+        saveState();
+        alert('Datos importados correctamente. La aplicación se recargará.');
+        location.reload();
+      } else {
+        alert('El archivo no tiene el formato correcto de AVANCE.');
+      }
+    } catch(err){
+      alert('Error al leer el archivo JSON.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ======== NAV ======== */
+function goTo(view){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('view-'+view).classList.add('active');
+  document.getElementById('nav-'+view).classList.add('active');
+  if(view==='cortes') renderCortes();
+  if(view==='registro') renderRegistro();
+  if(view==='dashboard') renderDashboard();
+}
+
+/* INIT */
+renderRegistro();
+</script>
+</body>
+</html>
