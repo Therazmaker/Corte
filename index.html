@@ -303,7 +303,7 @@ nav button.active{color:var(--gold);}
   <div class="modal-hdr">
     <button class="modal-back" onclick="closeModal()">‹ Volver</button>
     <div class="modal-op-info"><div id="m-op">—</div><div id="m-talla">—</div></div>
-    <div class="modal-hdr-right"></div>
+    <div class="modal-hdr-right" id="m-timer" style="font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:var(--gold);">00:00</div>
   </div>
   <div class="modal-body">
     <div id="m-counting">
@@ -759,8 +759,45 @@ function iniciarSesion(){
 }
 
 /* ======== MODAL Y GRÁFICOS ======== */
-function openModal(){ document.getElementById('counter-modal').classList.add('open'); renderModal(); }
-function closeModal(){ document.getElementById('counter-modal').classList.remove('open'); renderRegistro(); }
+let timerInterval = null;
+
+function openModal(){ 
+  document.getElementById('counter-modal').classList.add('open'); 
+  renderModal(); 
+  
+  if(timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(updateModalTimer, 1000);
+  updateModalTimer();
+}
+
+function closeModal(){ 
+  if(timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  document.getElementById('counter-modal').classList.remove('open'); 
+  renderRegistro(); 
+}
+
+function updateModalTimer(){
+  const s = getActiva();
+  if(!s) return;
+  const regs = state.registros.filter(r=>r.sesionId===s.id).sort((a,b)=>a.ts-b.ts);
+  const sumDone = regs.reduce((sum, r)=>sum+r.duracionSeg, 0);
+  const lastTs = regs.length ? regs[regs.length-1].ts : s.inicioTs;
+  const currentSegment = Math.max(0, Math.floor((Date.now() - lastTs)/1000));
+  const totalSeconds = sumDone + currentSegment;
+  
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const sec = totalSeconds % 60;
+  
+  const timerStr = [
+    h > 0 ? String(h).padStart(2, '0') : null,
+    String(m).padStart(2, '0'),
+    String(sec).padStart(2, '0')
+  ].filter(x => x !== null).join(':');
+  
+  document.getElementById('m-timer').textContent = timerStr;
+}
+
 function pausarSesion(){ const s=getActiva(); if(s){ s.estado='pausada'; saveState(); } closeModal(); }
 
 function renderModal(){
