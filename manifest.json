@@ -2,7 +2,7 @@
   "name": "AVANCE — Control de Producción",
   "short_name": "AVANCE",
   "description": "Registro de producción por talla y operación",
-  "start_url": "./avance-tracker.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f1821",
   "theme_color": "#0f1821",
