@@ -333,6 +333,19 @@ nav button.active{color:var(--gold);}
   </div>
 </div>
 
+<!-- MODAL SIGUIENTE TALLA -->
+<div id="next-talla-modal" style="position:fixed;inset:0;z-index:70;background:rgba(15,24,33,0.92);display:none;align-items:flex-end;justify-content:center;padding:0;">
+  <div id="nt-box" style="background:var(--card);border-top:2px solid var(--gold);border-radius:var(--r) var(--r) 0 0;width:100%;max-width:480px;padding:24px 20px 32px;transform:translateY(100%);transition:transform 0.3s cubic-bezier(.22,.85,.36,1);">
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="font-size:36px;">✅</div>
+      <div style="font-family:'Oswald',sans-serif;font-size:20px;color:var(--gold);margin-top:6px;" id="nt-titulo">¡Talla lista!</div>
+      <div style="font-size:13px;color:var(--dim);margin-top:4px;" id="nt-sub">Selecciona la siguiente</div>
+    </div>
+    <div id="nt-chips" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:20px;"></div>
+    <button class="btn-danger" style="margin-top:0;" onclick="cerrarNextTalla()">Terminar por ahora</button>
+  </div>
+</div>
+
 <!-- MODAL RESULTADO DE OPERACIÓN -->
 <div id="result-modal" style="position:fixed;inset:0;z-index:60;background:rgba(15,24,33,0.85);display:none;align-items:center;justify-content:center;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);padding:20px;">
   <div style="background:var(--card);border:1.5px solid var(--border2);border-radius:var(--r);width:100%;max-width:400px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.5);transform:scale(0.9);opacity:0;transition:all 0.2s;" id="rm-box">
@@ -699,7 +712,22 @@ function seleccionarOp(nombre, porTalla){
     if(c.tallas.length === 0){
       document.getElementById('in-tallas-chips').innerHTML = '<div style="font-size:12px;color:var(--red);margin-top:4px;">⚠️ Este corte no tiene tallas configuradas. Ve a la pestaña "Cortes", edítalo y agrega las tallas.</div>';
     } else {
-      document.getElementById('in-tallas-chips').innerHTML = c.tallas.map(t=>`<div class="chip" onclick="seleccionarTalla('${t.nombre}',${t.cantidad})">${t.nombre}</div>`).join('');
+      // Deduplicar tallas por nombre (merge cantidades si están repetidas)
+      const tallaMap = {};
+      c.tallas.forEach(t => {
+        if(tallaMap[t.nombre]) tallaMap[t.nombre] += t.cantidad;
+        else tallaMap[t.nombre] = t.cantidad;
+      });
+      // Filtrar tallas ya completadas para esta operación
+      const sesCompletadas = state.sesiones.filter(x => x.corteId===selCorteId && x.opNombre===nombre && x.estado==='completa');
+      const tallasListas = sesCompletadas.map(x=>x.talla);
+      const tallasDisp = Object.keys(tallaMap).filter(n => !tallasListas.includes(n));
+      
+      if(tallasDisp.length === 0){
+        document.getElementById('in-tallas-chips').innerHTML = '<div style="font-size:12px;color:var(--green);margin-top:4px;">✅ Todas las tallas de esta operación ya están completas.</div>';
+      } else {
+        document.getElementById('in-tallas-chips').innerHTML = tallasDisp.map(n => `<div class="chip" onclick="seleccionarTalla('${n}',${tallaMap[n]})">${n}</div>`).join('');
+      }
     }
   } else {
     document.getElementById('in-tallas-container').style.display='none';
@@ -818,12 +846,67 @@ function registrarLote(cant){
     el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
     if(cur<hasta) requestAnimationFrame(step);
     else {
-      // Cuando termina la animación, actualiza el resto del modal
       renderModal();
-      if(s.estado==='completa') setTimeout(()=>{alert('¡Talla completada! 🏆');closeModal();},300);
+      if(s.estado==='completa') setTimeout(()=>mostrarNextTalla(s), 400);
     }
   };
   requestAnimationFrame(step);
+}
+
+function mostrarNextTalla(sCompletada){
+  // Cerrar el contador modal
+  document.getElementById('counter-modal').classList.remove('open');
+  
+  const corte = state.cortes.find(x=>x.id===sCompletada.corteId);
+  if(!corte) { renderRegistro(); return; }
+  
+  // Deduplicar y filtrar tallas pendientes
+  const tallaMap = {};
+  corte.tallas.forEach(t => {
+    if(tallaMap[t.nombre]) tallaMap[t.nombre] += t.cantidad;
+    else tallaMap[t.nombre] = t.cantidad;
+  });
+  const sesComp = state.sesiones.filter(x=>x.corteId===sCompletada.corteId && x.opNombre===sCompletada.opNombre && x.estado==='completa');
+  const tallasListas = sesComp.map(x=>x.talla);
+  const tallasDisp = Object.keys(tallaMap).filter(n=>!tallasListas.includes(n));
+  
+  document.getElementById('nt-titulo').textContent = `¡Talla ${sCompletada.talla || ''} lista! 🏆`;
+  
+  const chipsEl = document.getElementById('nt-chips');
+  if(tallasDisp.length === 0){
+    document.getElementById('nt-sub').textContent = '¡Operación completa! Todas las tallas terminadas.';
+    chipsEl.innerHTML = '';
+  } else {
+    document.getElementById('nt-sub').textContent = `Quedan ${tallasDisp.length} talla(s). ¿Cuál es la siguiente?`;
+    chipsEl.innerHTML = tallasDisp.map(n => `
+      <div class="chip" style="font-size:16px;padding:12px 20px;" onclick="siguienteTalla('${n}',${tallaMap[n]},'${sCompletada.corteId}','${sCompletada.opNombre}')">
+        ${n} <span style="font-size:11px;color:var(--dim);"> ${tallaMap[n]} pzs</span>
+      </div>`).join('');
+  }
+  
+  const modal = document.getElementById('next-talla-modal');
+  modal.style.display = 'flex';
+  setTimeout(()=>{ document.getElementById('nt-box').style.transform='translateY(0)'; }, 10);
+}
+
+function siguienteTalla(nombre, cantidad, corteId, opNombre){
+  // Cerrar el next-talla modal
+  document.getElementById('nt-box').style.transform='translateY(100%)';
+  setTimeout(()=>{ document.getElementById('next-talla-modal').style.display='none'; }, 300);
+  
+  // Crear nueva sesión para la siguiente talla
+  const s = {
+    id:uid(), corteId, opNombre, talla:nombre,
+    meta:cantidad, estado:'activa', inicioTs:Date.now()
+  };
+  state.sesiones.push(s);
+  saveState();
+  setTimeout(()=>openModal(), 350);
+}
+
+function cerrarNextTalla(){
+  document.getElementById('nt-box').style.transform='translateY(100%)';
+  setTimeout(()=>{ document.getElementById('next-talla-modal').style.display='none'; renderRegistro(); }, 300);
 }
 
 function forzarTermino(){
