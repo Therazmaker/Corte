@@ -316,6 +316,8 @@ nav button.active{color:var(--gold);}
       <div class="m-count" id="m-count">0</div>
       <div class="m-meta" id="m-meta">/ 0</div>
       <div class="m-progress"><div class="m-fill" id="m-fill" style="width:0%"></div></div>
+
+      <div id="m-eta-box" style="text-align:center;padding:10px 0 4px;border-top:1px dashed var(--border2);margin-top:8px;"></div>
       
       <button id="m-main-btn">+10</button>
       <div class="m-sec-row">
@@ -742,6 +744,50 @@ function renderModal(){
   document.getElementById('m-meta').textContent='/ '+s.meta;
   document.getElementById('m-fill').style.width=Math.min(100,pct)+'%';
   
+  // --- ETA de tallas restantes ---
+  const corte = state.cortes.find(x=>x.id===s.corteId);
+  if(corte){
+    // Tallas que todavía no tienen sesión completa para esta operación
+    const sesSameOp = state.sesiones.filter(x=>x.corteId===s.corteId && x.opNombre===s.opNombre && x.estado==='completa');
+    const tallasCompletas = sesSameOp.map(x=>x.talla);
+    const tallasPendientes = corte.tallas.filter(t=>!tallasCompletas.includes(t.nombre));
+    // La actual cuenta como pendiente todavía, no la restamos
+    const pzsPendTotales = tallasPendientes.reduce((a,t)=>a+t.cantidad,0);
+    
+    // Calcular ritmo actual (seg por pieza) de sesiones completadas de esta op
+    let avgSegPieza = null;
+    const allRegsOp = state.registros.filter(r=>sesSameOp.find(x=>x.id===r.sesionId));
+    if(allRegsOp.length>0){
+      const tP=allRegsOp.reduce((a,r)=>a+r.cantidad,0);
+      const tS=allRegsOp.reduce((a,r)=>a+r.duracionSeg,0);
+      if(tP>0) avgSegPieza = tS/tP;
+    }
+    // Si no hay historial, usar los registros de la sesión actual
+    if(!avgSegPieza){
+      const regsAct = state.registros.filter(r=>r.sesionId===s.id);
+      if(regsAct.length>0){
+        const tP=regsAct.reduce((a,r)=>a+r.cantidad,0);
+        const tS=regsAct.reduce((a,r)=>a+r.duracionSeg,0);
+        if(tP>0) avgSegPieza = tS/tP;
+      }
+    }
+    
+    const etaEl = document.getElementById('m-eta-box');
+    if(etaEl){
+      if(avgSegPieza && pzsPendTotales>0){
+        const segsTotales = pzsPendTotales * avgSegPieza;
+        let etaTxt;
+        if(segsTotales < 60) etaTxt = Math.round(segsTotales)+'s';
+        else if(segsTotales < 3600) etaTxt = Math.round(segsTotales/60)+'min';
+        else { const h2=Math.floor(segsTotales/3600); etaTxt = h2+'h '+Math.round((segsTotales%3600)/60)+'min'; }
+        etaEl.innerHTML = `<span style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;">Termino en ~</span> <span style="font-family:'Space Mono',monospace;font-size:16px;color:var(--gold);font-weight:700;">${etaTxt}</span> <span style="font-size:10px;color:var(--dim);">(${tallasPendientes.length} tallas ⋅ ${pzsPendTotales} pzs)</span>`;
+      } else {
+        etaEl.innerHTML = `<span style="font-size:11px;color:var(--dim);">ETA disponible después del primer registro</span>`;
+      }
+    }
+  }
+  // --- fin ETA ---
+  
   const cap10=Math.min(10,rest), cap5=Math.min(5,rest), cap20=Math.min(20,rest);
   const b10=document.getElementById('m-main-btn'); b10.textContent=rest<=0?'✓':'+'+cap10; b10.disabled=rest<=0; b10.onclick=()=>registrarLote(cap10);
   const b5=document.getElementById('m-sec5'); b5.textContent=rest>=5?'+5':(rest>0?'+'+rest:'✓'); b5.disabled=rest<=0; b5.onclick=()=>registrarLote(cap5);
@@ -753,16 +799,31 @@ function renderModal(){
 
 function registrarLote(cant){
   const s=getActiva(); if(!s||cant<=0)return;
-  const h=piezasHechas(s.id), rest=s.meta-h, c=Math.min(cant,rest);
+  const hAntes=piezasHechas(s.id), rest=s.meta-hAntes, c=Math.min(cant,rest);
   if(c<=0)return;
   const regs=state.registros.filter(r=>r.sesionId===s.id).sort((a,b)=>a.ts-b.ts);
   const lastTs=regs.length?regs[regs.length-1].ts:s.inicioTs;
   const now=Date.now(), durSeg=Math.max(1,Math.round((now-lastTs)/1000));
   state.registros.push({id:uid(), sesionId:s.id, ts:now, cantidad:c, duracionSeg:durSeg});
-  if(h+c>=s.meta){ s.estado='completa'; s.finTs=now; setTimeout(()=>{alert('¡Talla completada!');closeModal();},300); }
+  if(hAntes+c>=s.meta){ s.estado='completa'; s.finTs=now; }
   saveState();
-  const el=document.getElementById('m-count'); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
-  renderModal();
+  
+  // Animación del contador: sube de uno en uno
+  const el=document.getElementById('m-count');
+  const desde=hAntes, hasta=hAntes+c;
+  let cur=desde;
+  const step=()=>{
+    cur++;
+    el.textContent=cur;
+    el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+    if(cur<hasta) requestAnimationFrame(step);
+    else {
+      // Cuando termina la animación, actualiza el resto del modal
+      renderModal();
+      if(s.estado==='completa') setTimeout(()=>{alert('¡Talla completada! 🏆');closeModal();},300);
+    }
+  };
+  requestAnimationFrame(step);
 }
 
 function forzarTermino(){
