@@ -354,10 +354,17 @@ nav button.active{color:var(--gold);}
       <div style="font-family:'Oswald',sans-serif;font-size:22px;color:var(--gold);" id="rm-op">Operación</div>
       <div style="font-size:13px;color:var(--dim);" id="rm-talla">Talla</div>
     </div>
-    <div style="position:relative;height:160px;margin-bottom:20px;background:var(--card2);border-radius:var(--rs);padding:10px;">
+    <div style="position:relative;height:160px;margin-bottom:15px;background:var(--card2);border-radius:var(--rs);padding:10px;">
       <div style="font-size:10px;color:var(--dim);text-transform:uppercase;margin-bottom:5px;position:absolute;top:10px;left:14px;z-index:2;">Rendimiento (Pzs vs Min)</div>
       <canvas id="rm-chart"></canvas>
     </div>
+    
+    <!-- Contenedor interactivo para cambiar entre tallas -->
+    <div style="margin-bottom:15px;text-align:center;">
+      <div style="font-size:11px;color:var(--dim);text-transform:uppercase;margin-bottom:6px;letter-spacing:0.04em;">Resaltar Talla</div>
+      <div id="rm-tallas-chips" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;"></div>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
       <div style="background:var(--card2);border-radius:var(--rs);padding:12px;text-align:center;">
         <div style="font-family:'Space Mono',monospace;font-size:24px;font-weight:700;color:var(--chalk);" id="rm-pzs">0</div>
@@ -577,21 +584,34 @@ function renderPausedAndCompleted(){
      divPausadas.style.display = 'none';
   }
 
-  // Tareas completadas recientemente
-  const completadas = state.sesiones.filter(s=>s.estado==='completa').sort((a,b)=>b.finTs - a.finTs).slice(0, 5);
+  // Tareas completadas recientemente agrupadas por operación y corte
+  const completadas = state.sesiones.filter(s=>s.estado==='completa').sort((a,b)=>b.finTs - a.finTs);
+  
+  // Agrupar únicas por opNombre + corteId
+  const opsUnicas = [];
+  const cacheGrupo = new Set();
+  completadas.forEach(c => {
+    const key = `${c.opNombre}_${c.corteId}`;
+    if(!cacheGrupo.has(key)){
+      cacheGrupo.add(key);
+      opsUnicas.push(c);
+    }
+  });
+
   const divCompletadas = document.getElementById('lista-completadas');
-  if(completadas.length>0){
+  if(opsUnicas.length>0){
      divCompletadas.style.display = 'block';
-     document.getElementById('lc-content').innerHTML = completadas.map(c => {
-       const h = piezasHechas(c.id);
+     document.getElementById('lc-content').innerHTML = opsUnicas.slice(0, 5).map(c => {
+       const corte = state.cortes.find(x => x.id === c.corteId);
+       const nombreCorte = corte ? corte.nombre : 'Producción Anterior';
        return `
        <div class="card" style="margin-bottom:10px;border-color:var(--green);background:rgba(90,159,116,0.05);">
          <div style="display:flex;justify-content:space-between;align-items:center;">
            <div>
              <div style="font-family:'Oswald',sans-serif;color:var(--green);font-size:16px;">${c.opNombre}</div>
-             <div style="font-size:12px;color:var(--dim);">${c.talla?'Talla '+c.talla:'Global'} - Completada (${h} pzs)</div>
+             <div style="font-size:11px;color:var(--dim);">${nombreCorte}</div>
            </div>
-           <button class="btn-secondary" style="width:auto;margin:0;padding:8px 14px;" onclick="verResultado('${c.id}')">Ver resultado</button>
+           <button class="btn-secondary" style="width:auto;margin:0;padding:8px 14px;" onclick="verResultado('${c.opNombre}','${c.corteId}')">Ver resultados</button>
          </div>
        </div>
        `
@@ -614,51 +634,103 @@ function reanudarSesion(id){
 
 let rmChartObj = null;
 
-function verResultado(id){
-  const s = state.sesiones.find(x=>x.id===id);
-  if(!s) return;
-  const h = piezasHechas(s.id);
-  const regs = state.registros.filter(r=>r.sesionId===s.id).sort((a,b)=>a.ts-b.ts);
-  const t = regs.reduce((a,r)=>a+r.duracionSeg,0);
-  const rate = t>0 ? Math.round(h/(t/3600)) : 0;
+function verResultado(opNombre, corteId){
+  const sesiones = state.sesiones.filter(s=>s.opNombre===opNombre && (s.corteId===corteId || s.corteId==='corte_legado' && corteId==='corte_legado') && s.estado==='completa');
+  if(sesiones.length===0) return;
   
-  let hFormated = t+'s';
-  if(t>60){
-    const m = Math.floor(t/60);
-    hFormated = m>60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
-  }
+  document.getElementById('rm-op').textContent = opNombre;
   
-  document.getElementById('rm-op').textContent = s.opNombre;
-  document.getElementById('rm-talla').textContent = s.talla ? 'Talla ' + s.talla : 'Global';
-  document.getElementById('rm-pzs').textContent = h;
-  document.getElementById('rm-tiempo').textContent = hFormated;
-  document.getElementById('rm-ritmo').textContent = rate;
+  const corte = state.cortes.find(x => x.id === corteId);
+  document.getElementById('rm-talla').textContent = corte ? corte.nombre : 'Producción Anterior';
   
-  // Generar gráfico de rendimiento
-  const dataAct = [{x:0, y:0}];
-  let acumP=0, acumT=0;
-  regs.forEach(r=>{ acumP+=r.cantidad; acumT+=r.duracionSeg; dataAct.push({x:acumT/60, y:acumP}); }); // X en mins
-
-  if(rmChartObj) rmChartObj.destroy();
-  const ctx = document.getElementById('rm-chart').getContext('2d');
-  rmChartObj = new Chart(ctx, {
-    type:'line', 
-    data:{
-      datasets: [{
-        label: 'Progreso', data: dataAct,
-        borderColor:'#5a9f74', backgroundColor:'rgba(90,159,116,0.1)',
-        borderWidth:3, fill:true, tension:0.1
-      }]
-    },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{display:false}, tooltip:{enabled:false}},
-      scales:{
-        x:{type:'linear', beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#a8b2bd'}},
-        y:{beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#a8b2bd'}}
-      }
+  // Dibujar y cargar los chips de selección de talla en el modal
+  const chipsContainer = document.getElementById('rm-tallas-chips');
+  let selectedTalla = 'Todas';
+  
+  const actualizarPanelTalla = (tallaTarget) => {
+    selectedTalla = tallaTarget;
+    
+    // Resaltar el chip seleccionado
+    const chips = chipsContainer.querySelectorAll('.chip');
+    chips.forEach(c => c.classList.toggle('sel', c.getAttribute('data-talla') === tallaTarget));
+    
+    // Recopilar estadísticas basadas en la selección
+    let pzsTarget = 0;
+    let tiempoTarget = 0;
+    let sesionesAFiltrar = sesiones;
+    
+    if(tallaTarget !== 'Todas'){
+      sesionesAFiltrar = sesiones.filter(s=>s.talla === tallaTarget);
     }
+    
+    sesionesAFiltrar.forEach(s => {
+      pzsTarget += piezasHechas(s.id);
+      const regs = state.registros.filter(r=>r.sesionId===s.id);
+      tiempoTarget += regs.reduce((a,r)=>a+r.duracionSeg, 0);
+    });
+    
+    const rateTarget = tiempoTarget>0 ? Math.round(pzsTarget/(tiempoTarget/3600)) : 0;
+    let tFormated = tiempoTarget+'s';
+    if(tiempoTarget>60){
+      const m = Math.floor(tiempoTarget/60);
+      tFormated = m>60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
+    }
+    
+    document.getElementById('rm-pzs').textContent = pzsTarget;
+    document.getElementById('rm-tiempo').textContent = tFormated;
+    document.getElementById('rm-ritmo').textContent = rateTarget;
+    
+    // Actualizar gráfico destacando la línea de la talla seleccionada
+    const datasets = [];
+    sesiones.forEach(s => {
+      const regs = state.registros.filter(r=>r.sesionId===s.id).sort((a,b)=>a.ts-b.ts);
+      const dataAct = [{x:0, y:0}];
+      let acumP=0, acumT=0;
+      regs.forEach(r=>{ acumP+=r.cantidad; acumT+=r.duracionSeg; dataAct.push({x:acumT/60, y:acumP}); }); // X en mins
+      
+      const isTarget = tallaTarget === 'Todas' || s.talla === tallaTarget;
+      
+      datasets.push({
+        label: s.talla ? 'Talla '+s.talla : 'Global',
+        data: dataAct,
+        borderColor: isTarget ? '#5a9f74' : 'rgba(168,178,189,0.2)',
+        backgroundColor: isTarget ? 'rgba(90,159,116,0.06)' : 'transparent',
+        borderWidth: isTarget ? 3.5 : 1.5,
+        fill: isTarget,
+        tension: 0.1,
+        pointRadius: isTarget ? 3 : 0
+      });
+    });
+    
+    if(rmChartObj) rmChartObj.destroy();
+    const ctx = document.getElementById('rm-chart').getContext('2d');
+    rmChartObj = new Chart(ctx, {
+      type:'line',
+      data: { datasets },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{display:false}, tooltip:{enabled:false}},
+        scales:{
+          x:{type:'linear', beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#a8b2bd'}},
+          y:{beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#a8b2bd'}}
+        }
+      }
+    });
+  };
+  
+  // Renderizar los chips de talla en el modal
+  const tallasDisponibles = ['Todas', ...new Set(sesiones.map(s=>s.talla).filter(Boolean))];
+  chipsContainer.innerHTML = tallasDisponibles.map(t => 
+    `<div class="chip" style="font-size:12px;padding:6px 12px;" data-talla="${t}">${t}</div>`
+  ).join('');
+  
+  // Escuchar clics en los chips
+  chipsContainer.querySelectorAll('.chip').forEach(chip => {
+    chip.onclick = () => actualizarPanelTalla(chip.getAttribute('data-talla'));
   });
+  
+  // Inicializar mostrando todas
+  actualizarPanelTalla('Todas');
   
   const modal = document.getElementById('result-modal');
   modal.style.display = 'flex';
