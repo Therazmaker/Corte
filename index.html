@@ -132,6 +132,98 @@ nav button.active{color:var(--gold);}
 .mf-btn{flex:1; padding:15px 0; border:none; border-radius:var(--rs); font-family:'Oswald',sans-serif; font-weight:700; font-size:13px; cursor:pointer;}
 .mf-pause{background:var(--card2);color:var(--dim);border:1.5px solid var(--border2);}
 .mf-end{background:rgba(193,85,74,.12);color:var(--red);border:1.5px solid rgba(193,85,74,.3);}
+
+/* ===== CALENDARIO ===== */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-top: 15px;
+}
+.calendar-day-header {
+  text-align: center;
+  font-family: 'Oswald', sans-serif;
+  font-size: 11px;
+  color: var(--dim);
+  text-transform: uppercase;
+  padding: 6px 0;
+}
+.calendar-day {
+  aspect-ratio: 1;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--rs);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  position: relative;
+  min-height: 80px;
+}
+.calendar-day.empty {
+  background: transparent;
+  border: none;
+}
+.calendar-day.today {
+  border-color: var(--gold);
+  box-shadow: inset 0 0 4px var(--gold-glow);
+}
+.calendar-day.selected {
+  border-color: var(--gold);
+  background: var(--card2);
+}
+.calendar-day-num {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--chalk);
+  margin-bottom: 2px;
+}
+.calendar-day.today .calendar-day-num {
+  color: var(--gold);
+}
+.calendar-day-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  flex: 1;
+}
+.calendar-task-item {
+  font-size: 8px;
+  background: var(--card2);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  padding: 2px 4px;
+  color: var(--chalk);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.calendar-day-badge {
+  font-size: 8px;
+  background: var(--gold);
+  color: var(--bg);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: 'Oswald', sans-serif;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  margin-top: 3px;
+}
+.calendar-day-badge.done {
+  background: var(--green);
+}
+.calendar-day-badge.predicted {
+  background: var(--gold);
+  box-shadow: 0 0 6px var(--gold);
+  animation: pulse 2s infinite;
+  margin-top: auto;
+}
 </style>
 </head>
 <body>
@@ -173,6 +265,12 @@ nav button.active{color:var(--gold);}
         <option value="global">Global (Todo)</option>
       </select>
       <button class="btn-secondary" style="margin:0;padding:0 20px;" onclick="addOpCorte()">+</button>
+    </div>
+    
+    <!-- Sugerencias de operaciones -->
+    <div id="fc-o-sugerencias" style="margin-top:10px;">
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;margin-bottom:6px;">Sugeridas del historial</div>
+      <div class="chip-row" id="fc-o-sugeridas-chips"></div>
     </div>
 
     <button class="btn-primary" onclick="guardarCorte()" style="margin-top:30px;">Guardar Corte</button>
@@ -287,6 +385,51 @@ nav button.active{color:var(--gold);}
   </div>
 </section>
 
+<!-- ========== VISTA CALENDARIO ========== -->
+<section id="view-calendario" class="view">
+  <div class="card" style="margin-bottom:20px;">
+    <div class="eyebrow" style="margin-top:0;">Optimización de jornada</div>
+    <h4 style="margin:0 0 10px;color:var(--chalk);">Configurar Horas Diarias de Trabajo</h4>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <span style="font-size:14px;color:var(--dim);">Horas diarias:</span>
+      <span id="cal-jornada-val" style="font-family:'Space Mono',monospace;font-size:20px;font-weight:700;color:var(--gold);">8 horas</span>
+    </div>
+    <input type="range" id="cal-jornada-slider" min="2" max="14" value="8" style="width:100%;accent-color:var(--gold);" oninput="cambiarJornadaSlider(this.value)">
+  </div>
+
+  <div class="chart-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <button class="btn-secondary" style="margin:0;padding:6px 12px;width:auto;" onclick="navegarMes(-1)">‹ Ant</button>
+      <h3 style="margin:0;font-family:'Oswald',sans-serif;color:var(--gold);font-size:18px;text-transform:uppercase;" id="cal-mes-titulo">Mes Año</h3>
+      <button class="btn-secondary" style="margin:0;padding:6px 12px;width:auto;" onclick="navegarMes(1)">Sig ›</button>
+    </div>
+    <div class="calendar-grid">
+      <div class="calendar-day-header">Lun</div>
+      <div class="calendar-day-header">Mar</div>
+      <div class="calendar-day-header">Mié</div>
+      <div class="calendar-day-header">Jue</div>
+      <div class="calendar-day-header">Vie</div>
+      <div class="calendar-day-header">Sáb</div>
+      <div class="calendar-day-header">Dom</div>
+    </div>
+    <div class="calendar-grid" id="cal-days-container"></div>
+  </div>
+
+  <div class="card" style="margin-top:20px;border-color:var(--gold);" id="cal-prediccion-resumen">
+    <div style="font-size:11px;color:var(--gold);text-transform:uppercase;letter-spacing:0.06em;">Predicción de Entrega</div>
+    <div style="font-family:'Oswald',sans-serif;font-size:20px;color:var(--chalk);margin-top:6px;" id="cal-pred-fecha">—</div>
+    <div style="font-size:12px;color:var(--dim);margin-top:4px;" id="cal-pred-detalles">—</div>
+  </div>
+
+  <!-- Panel detalle de día seleccionado -->
+  <div class="card" style="margin-top:20px;display:none;" id="cal-day-detail">
+    <h4 style="margin:0 0 20px;color:var(--gold);font-family:'Oswald',sans-serif;text-transform:uppercase;" id="cal-detail-title">Plan de Trabajo del Día</h4>
+    
+    <!-- Contenedor del listado secuencial de tareas -->
+    <div style="display:flex;flex-direction:column;gap:18px;position:relative;padding-left:22px;border-left:2px dashed var(--border2);margin-left:10px;" id="cal-timeline-list"></div>
+  </div>
+</section>
+
 </main>
 
 <nav>
@@ -295,6 +438,7 @@ nav button.active{color:var(--gold);}
     <span class="nav-dot" id="nav-dot-registro"></span>
     <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Registro
   </button>
+  <button id="nav-calendario" onclick="goTo('calendario')"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" stroke="currentColor" stroke-width="1.8" fill="none"/><line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" stroke-width="1.8"/><line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" stroke-width="1.8"/><line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" stroke-width="1.8"/></svg>Calendario</button>
   <button id="nav-dashboard" onclick="goTo('dashboard')"><svg viewBox="0 0 24 24"><path d="M4 19V9M11 19V5M18 19v-7"/></svg>Dashboard</button>
 </nav>
 
@@ -502,6 +646,32 @@ function renderFormTemp(){
   tl.innerHTML = formTemp.tallas.map((t,i)=>`<div class="list-item"><span>Talla ${t.nombre}</span><div style="display:flex;align-items:center;gap:10px;"><span style="font-family:'Space Mono',monospace">${t.cantidad} pzs</span><button style="background:transparent;border:none;color:var(--red);cursor:pointer;padding:4px;" onclick="quitarTalla(${i})">✕</button></div></div>`).join('');
   const ol=document.getElementById('fc-ops-list');
   ol.innerHTML = formTemp.operaciones.map((o,i)=>`<div class="list-item"><span>${o.nombre}</span><div style="display:flex;align-items:center;gap:10px;"><span style="font-size:10px;color:var(--gold);text-transform:uppercase">${o.porTalla?'Por Talla':'Global'}</span><button style="background:transparent;border:none;color:var(--red);cursor:pointer;padding:4px;" onclick="quitarOp(${i})">✕</button></div></div>`).join('');
+  
+  // Renderizar sugerencias del historial de operaciones
+  const sugerenciasCont = document.getElementById('fc-o-sugeridas-chips');
+  const opsHistorial = [];
+  state.cortes.forEach(c => {
+    c.operaciones.forEach(o => {
+      if(!opsHistorial.includes(o.nombre)) opsHistorial.push(o.nombre);
+    });
+  });
+  
+  // Mostrar solo las operaciones que no se hayan agregado ya en formTemp
+  const yaAgregadas = formTemp.operaciones.map(o=>o.nombre);
+  const dispSugeridas = opsHistorial.filter(name => !yaAgregadas.includes(name));
+  
+  if(dispSugeridas.length > 0){
+    document.getElementById('fc-o-sugerencias').style.display = 'block';
+    sugerenciasCont.innerHTML = dispSugeridas.map(name => 
+      `<div class="chip" style="font-size:11px;padding:5px 10px;" onclick="agregarSugerida('${name}')">${name}</div>`
+    ).join('');
+  } else {
+    document.getElementById('fc-o-sugerencias').style.display = 'none';
+  }
+}
+function agregarSugerida(nombre){
+  formTemp.operaciones.push({nombre: nombre, porTalla: true});
+  renderFormTemp();
 }
 function quitarTalla(i){ formTemp.tallas.splice(i,1); renderFormTemp(); }
 function quitarOp(i){ formTemp.operaciones.splice(i,1); renderFormTemp(); }
@@ -1297,6 +1467,338 @@ function goTo(view){
   if(view==='cortes') renderCortes();
   if(view==='registro') renderRegistro();
   if(view==='dashboard') renderDashboard();
+  if(view==='calendario') renderCalendario();
+}
+
+/* ======== CALENDARIO PREDICTIVO ======== */
+let calCurrentDate = new Date();
+let horasJornadaConfig = 8;
+
+function cambiarJornadaSlider(val){
+  horasJornadaConfig = parseInt(val, 10);
+  document.getElementById('cal-jornada-val').textContent = horasJornadaConfig + ' horas';
+  renderCalendario();
+}
+
+function navegarMes(offset){
+  calCurrentDate.setMonth(calCurrentDate.getMonth() + offset);
+  renderCalendario();
+}
+
+function renderCalendario(){
+  const container = document.getElementById('cal-days-container');
+  container.innerHTML = '';
+  
+  const y = calCurrentDate.getFullYear();
+  const m = calCurrentDate.getMonth();
+  
+  // Set titulo
+  const mesesNombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  document.getElementById('cal-mes-titulo').textContent = `${mesesNombres[m]} ${y}`;
+  
+  // Primer dia del mes y total dias
+  const primerDiaIndex = (new Date(y, m, 1).getDay() + 6) % 7; // Ajustar para Lunes=0 a Domingo=6
+  const totalDias = new Date(y, m + 1, 0).getDate();
+  
+  // Espacios vacíos del inicio
+  for(let i=0; i<primerDiaIndex; i++){
+    container.innerHTML += `<div class="calendar-day empty"></div>`;
+  }
+  
+  // Calcular predicción sobre el último corte activo
+  let predMeta = null;
+  if(state.cortes.length > 0){
+    const cActivo = state.cortes[state.cortes.length - 1];
+    predMeta = calcularPrediccionCorte(cActivo.id, horasJornadaConfig);
+  }
+  
+  // Dibujar días
+  const hoy = new Date();
+  for(let d=1; d<=totalDias; d++){
+    const currDateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const esHoy = hoy.getDate() === d && hoy.getMonth() === m && hoy.getFullYear() === y;
+    
+    let tasksHTML = '';
+    let badgeHTML = '';
+    
+    // Tareas sugeridas para hoy
+    if(predMeta && predMeta.planTrabajo[currDateStr]){
+      const tareasDia = predMeta.planTrabajo[currDateStr];
+      tasksHTML = `<div class="calendar-day-tasks">` + tareasDia.map(t => {
+        const tallaFmt = t.talla ? ` T.${t.talla}` : ' Glb';
+        return `<div class="calendar-task-item" title="${t.opNombre}${tallaFmt} (${t.pzs} pzs)">${t.pzs} ${t.opNombre}</div>`;
+      }).join('') + `</div>`;
+    }
+    
+    // Si coincide con la predicción del corte activo, ponemos la meta predicha
+    if(predMeta && predMeta.fechaSimple === currDateStr){
+      badgeHTML = `<div class="calendar-day-badge predicted">🏁 Final ~${predMeta.horaTxt}</div>`;
+    }
+    
+    const isSelected = selectedDateStr === currDateStr;
+    
+    container.innerHTML += `
+      <div class="calendar-day ${esHoy?'today':''} ${isSelected?'selected':''}" style="cursor:pointer;" onclick="seleccionarDiaCal('${currDateStr}')">
+        <div class="calendar-day-num">${d}</div>
+        ${tasksHTML}
+        ${badgeHTML}
+      </div>`;
+  }
+  
+  // Renderizar resumen textual
+  const resFecha = document.getElementById('cal-pred-fecha');
+  const resDetalles = document.getElementById('cal-pred-detalles');
+  
+  if(predMeta){
+    resFecha.textContent = predMeta.labelFecha;
+    resDetalles.textContent = `Basado en ${predMeta.pzsRestantes} pzs restantes a tu ritmo de trabajo con jornadas de ${horasJornadaConfig}h al día (excluyendo domingos).`;
+    
+    // Si hay un día seleccionado, actualizar su detalle
+    if(selectedDateStr) {
+      renderDetalleDia(predMeta.planTrabajo[selectedDateStr], selectedDateStr);
+    } else {
+      document.getElementById('cal-day-detail').style.display = 'none';
+    }
+  } else {
+    resFecha.textContent = 'Sin corte activo';
+    resDetalles.textContent = 'Crea un corte y registra al menos una pieza para proyectar.';
+    document.getElementById('cal-day-detail').style.display = 'none';
+  }
+}
+
+let selectedDateStr = null;
+
+function seleccionarDiaCal(dateStr){
+  selectedDateStr = dateStr;
+  renderCalendario();
+}
+
+function renderDetalleDia(tareas, dateStr){
+  const detailPanel = document.getElementById('cal-day-detail');
+  const listContainer = document.getElementById('cal-timeline-list');
+  
+  if(!tareas || tareas.length === 0){
+    detailPanel.style.display = 'none';
+    return;
+  }
+  
+  detailPanel.style.display = 'block';
+  
+  // Dar formato amigable a la fecha
+  const p = dateStr.split('-');
+  const f = new Date(p[0], p[1]-1, p[2]);
+  const diasSemana = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const mesesNombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  document.getElementById('cal-detail-title').textContent = `${diasSemana[f.getDay()]} ${p[2]} de ${mesesNombres[f.getMonth()]}`;
+  
+  let listHTML = '';
+  
+  // Paleta de colores para las bolitas de la línea de tiempo
+  const colores = ['#c17f3e', '#5a9f74', '#c1554a', '#a8b2bd', '#8f5f30'];
+  
+  tareas.forEach((t, index) => {
+    const startMins = Math.round((t.startHour % 1) * 60);
+    const startH = Math.floor(t.startHour);
+    const startDisplay = `${startH % 12 || 12}:${String(startMins).padStart(2,'0')} ${startH >= 12 ? 'PM' : 'AM'}`;
+
+    const endMins = Math.round((t.endHour % 1) * 60);
+    const endH = Math.floor(t.endHour);
+    const endDisplay = `${endH % 12 || 12}:${String(endMins).padStart(2,'0')} ${endH >= 12 ? 'PM' : 'AM'}`;
+    
+    const tallaLabel = t.talla ? ` T. ${t.talla}` : ' Global';
+    const color = colores[index % colores.length];
+    
+    listHTML += `
+      <div style="position:relative;padding-bottom:2px;">
+        <!-- Bolita en la línea vertical -->
+        <div style="
+          position:absolute;
+          left:-29px;
+          top:5px;
+          width:12px;
+          height:12px;
+          border-radius:50%;
+          background:${color};
+          border:3px solid var(--bg);
+          box-shadow:0 0 0 1px var(--border2);
+        "></div>
+        
+        <!-- Tarjeta de la tarea -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:var(--card2);border:1px solid var(--border2);border-radius:var(--rs);padding:12px 14px;">
+          <div style="flex:1;">
+            <div style="font-family:'Oswald',sans-serif;font-size:14px;color:var(--gold);text-transform:uppercase;letter-spacing:0.04em;">
+              ${t.opNombre}${tallaLabel}
+            </div>
+            <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:var(--chalk);margin-top:4px;">
+              ${t.pzs} pzs
+            </div>
+          </div>
+          <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--dim);text-align:right;background:var(--card);border:1px solid var(--border);padding:6px 10px;border-radius:var(--rs);white-space:nowrap;">
+            ${startDisplay}<br>a ${endDisplay}
+          </div>
+        </div>
+      </div>`;
+  });
+  
+  listContainer.innerHTML = listHTML;
+}
+
+function calcularPrediccionCorte(corteId, horasJornada){
+  const c = state.cortes.find(x=>x.id===corteId);
+  if(!c) return null;
+  
+  // Calcular ritmo promedio general (segundos por pieza)
+  let ritmoGeneralSeg = 18; // default: 200 piezas por hora -> 18 seg por pieza
+  if(state.registros.length > 5){
+    const totSeg = state.registros.reduce((a,r)=>a+r.duracionSeg, 0);
+    const totPzs = state.registros.reduce((a,r)=>a+r.cantidad, 0);
+    if(totPzs > 0) ritmoGeneralSeg = totSeg / totPzs;
+  }
+
+  // Obtener ritmo por operación específica
+  const getOpSpeed = (opName) => {
+    const sesOp = state.sesiones.filter(s => s.opNombre === opName && s.estado === 'completa');
+    const regsOp = state.registros.filter(r => sesOp.find(s => s.id === r.sesionId));
+    if(regsOp.length > 0) {
+      const totPzs = regsOp.reduce((sum, r) => sum + r.cantidad, 0);
+      const totSeg = regsOp.reduce((sum, r) => sum + r.duracionSeg, 0);
+      if(totPzs > 0) return totSeg / totPzs; 
+    }
+    // Si no hay completas, buscar registros de sesiones en curso
+    const sesInCurso = state.sesiones.filter(s => s.opNombre === opName);
+    const regsInCurso = state.registros.filter(r => sesInCurso.find(s => s.id === r.sesionId));
+    if(regsInCurso.length > 0) {
+      const totPzs = regsInCurso.reduce((sum, r) => sum + r.cantidad, 0);
+      const totSeg = regsInCurso.reduce((sum, r) => sum + r.duracionSeg, 0);
+      if(totPzs > 0) return totSeg / totPzs;
+    }
+    return ritmoGeneralSeg; 
+  };
+  
+  // Recopilar lista de tareas pendientes
+  const tareasPendientesList = [];
+  c.operaciones.forEach(op => {
+    if(op.porTalla) {
+      c.tallas.forEach(t => {
+        const ses = state.sesiones.find(s=>s.corteId===corteId && s.opNombre===op.nombre && s.talla===t.nombre);
+        const hechas = ses ? piezasHechas(ses.id) : 0;
+        const pend = t.cantidad - hechas;
+        if(pend > 0) {
+          tareasPendientesList.push({ opNombre: op.nombre, talla: t.nombre, pzs: pend });
+        }
+      });
+    } else {
+      const totalGlobal = c.tallas.reduce((sum, t) => sum + t.cantidad, 0);
+      const ses = state.sesiones.find(s=>s.corteId===corteId && s.opNombre===op.nombre && !s.talla);
+      const hechas = ses ? piezasHechas(ses.id) : 0;
+      const pend = totalGlobal - hechas;
+      if(pend > 0) {
+        tareasPendientesList.push({ opNombre: op.nombre, talla: null, pzs: pend });
+      }
+    }
+  });
+
+  const pendTotalPiezas = tareasPendientesList.reduce((a,t)=>a+t.pzs, 0);
+  if(pendTotalPiezas === 0){
+    return {
+      fechaSimple: '',
+      labelFecha: '¡Lote completado!',
+      pzsRestantes: 0,
+      horaTxt: 'Completado',
+      planTrabajo: {}
+    };
+  }
+
+  // Estimar el tiempo en horas para cada tarea pendiente
+  tareasPendientesList.forEach(t => {
+    t.segPorPieza = getOpSpeed(t.opNombre);
+    t.horasTotales = (t.pzs * t.segPorPieza) / 3600;
+  });
+  
+  const dailyWorkPlan = {}; 
+  let fechaCalculada = new Date(); // Inicia hoy
+  
+  // Si hoy es domingo, empezamos a programar el lunes
+  if(fechaCalculada.getDay() === 0){
+    fechaCalculada.setDate(fechaCalculada.getDate() + 1);
+    fechaCalculada.setHours(8,0,0,0);
+  }
+  
+  let currentTaskIndex = 0;
+  while(currentTaskIndex < tareasPendientesList.length){
+    const dateStr = `${fechaCalculada.getFullYear()}-${String(fechaCalculada.getMonth()+1).padStart(2,'0')}-${String(fechaCalculada.getDate()).padStart(2,'0')}`;
+    if(!dailyWorkPlan[dateStr]) dailyWorkPlan[dateStr] = [];
+    
+    // Calcular horas disponibles hoy
+    let horaActual = fechaCalculada.getHours() + (fechaCalculada.getMinutes()/60);
+    const horaFinJornada = 8 + horasJornada;
+    let horasDisponiblesHoy = Math.max(0, horaFinJornada - Math.max(8, horaActual));
+    if(fechaCalculada.getDate() !== new Date().getDate()){
+      horasDisponiblesHoy = horasJornada;
+      fechaCalculada.setHours(8, 0, 0, 0);
+      horaActual = 8;
+    }
+    
+    let horasUsadasHoy = 0;
+    while(currentTaskIndex < tareasPendientesList.length && horasUsadasHoy < horasDisponiblesHoy){
+      const task = tareasPendientesList[currentTaskIndex];
+      const horasDisponiblesRestantes = horasDisponiblesHoy - horasUsadasHoy;
+      
+      const startH = horaActual + horasUsadasHoy;
+      
+      if(task.horasTotales <= horasDisponiblesRestantes){
+        // Cabe completa hoy
+        const endH = startH + task.horasTotales;
+        dailyWorkPlan[dateStr].push({ opNombre: task.opNombre, talla: task.talla, pzs: task.pzs, startHour: startH, endHour: endH });
+        horasUsadasHoy += task.horasTotales;
+        currentTaskIndex++;
+      } else {
+        // Cabe una parte hoy
+        const fraccion = horasDisponiblesRestantes / task.horasTotales;
+        const pzsHoy = Math.round(task.pzs * fraccion);
+        const endH = startH + horasDisponiblesRestantes;
+        if(pzsHoy > 0){
+          dailyWorkPlan[dateStr].push({ opNombre: task.opNombre, talla: task.talla, pzs: pzsHoy, startHour: startH, endHour: endH });
+        }
+        
+        // El resto pasa al dia siguiente
+        task.pzs -= pzsHoy;
+        task.horasTotales -= horasDisponiblesRestantes;
+        horasUsadasHoy = horasDisponiblesHoy;
+      }
+    }
+    
+    if(horasUsadasHoy >= horasDisponiblesHoy || currentTaskIndex >= tareasPendientesList.length) {
+      if(currentTaskIndex < tareasPendientesList.length) {
+        // Avanzar al siguiente dia
+        fechaCalculada.setDate(fechaCalculada.getDate() + 1);
+        if(fechaCalculada.getDay() === 0){
+          fechaCalculada.setDate(fechaCalculada.getDate() + 1);
+        }
+        fechaCalculada.setHours(8, 0, 0, 0);
+      } else {
+        // Terminamos todas las tareas, ajustar hora final
+        const minTotales = horasUsadasHoy * 60;
+        fechaCalculada.setHours(8, 0, 0, 0);
+        fechaCalculada.setMinutes(fechaCalculada.getMinutes() + minTotales);
+      }
+    }
+  }
+  
+  const diasSemana = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const mesesNombres = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  
+  const horaFmt = fechaCalculada.getHours() % 12 || 12;
+  const ampm = fechaCalculada.getHours() >= 12 ? 'PM' : 'AM';
+  const minFmt = String(fechaCalculada.getMinutes()).padStart(2, '0');
+  
+  return {
+    fechaSimple: `${fechaCalculada.getFullYear()}-${String(fechaCalculada.getMonth()+1).padStart(2,'0')}-${String(fechaCalculada.getDate()).padStart(2,'0')}`,
+    labelFecha: `🏁 Entrega: ${diasSemana[fechaCalculada.getDay()]} ${fechaCalculada.getDate()} de ${mesesNombres[fechaCalculada.getMonth()]} a las ${horaFmt}:${minFmt} ${ampm}`,
+    pzsRestantes: pendTotalPiezas,
+    horaTxt: `${horaFmt}:${minFmt} ${ampm}`,
+    planTrabajo: dailyWorkPlan
+  };
 }
 
 /* INIT */
