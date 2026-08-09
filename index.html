@@ -461,7 +461,28 @@ nav button.active{color:var(--gold);}
       <div class="m-meta" id="m-meta">/ 0</div>
       <div class="m-progress"><div class="m-fill" id="m-fill" style="width:0%"></div></div>
 
-      <div id="m-eta-box" style="text-align:center;padding:10px 0 4px;border-top:1px dashed var(--border2);margin-top:8px;"></div>
+      <!-- Banner de rendimiento vs mejor tiempo personal -->
+      <div id="m-perf-banner" style="
+        border-radius:var(--rs);
+        padding:10px 14px;
+        margin:10px 0 4px;
+        display:flex;
+        align-items:center;
+        gap:10px;
+        transition: background 0.3s ease, border-color 0.3s ease;
+        border:1.5px solid var(--border2);
+        background:var(--card2);
+        min-height:46px;
+      ">
+        <div id="m-perf-icon" style="font-size:22px;line-height:1;">⚪</div>
+        <div style="flex:1;">
+          <div id="m-perf-label" style="font-family:'Oswald',sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:0.06em;color:var(--dim);">Calculando ritmo...</div>
+          <div id="m-perf-detail" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--dim);margin-top:2px;"></div>
+        </div>
+        <div id="m-perf-badge" style="font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:var(--dim);"></div>
+      </div>
+
+      <div id="m-eta-box" style="text-align:center;padding:10px 0 4px;border-top:1px dashed var(--border2);margin-top:4px;"></div>
       
       <button id="m-main-btn">+10</button>
       <div class="m-sec-row">
@@ -1125,11 +1146,99 @@ function registrarLote(cant){
     el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
     if(cur<hasta) requestAnimationFrame(step);
     else {
+      actualizarBannerRendimiento(s);
       renderModal();
       if(s.estado==='completa') setTimeout(()=>mostrarNextTalla(s), 400);
     }
   };
   requestAnimationFrame(step);
+}
+
+function actualizarBannerRendimiento(s){
+  const banner  = document.getElementById('m-perf-banner');
+  const iconEl  = document.getElementById('m-perf-icon');
+  const labelEl = document.getElementById('m-perf-label');
+  const detEl   = document.getElementById('m-perf-detail');
+  const badgeEl = document.getElementById('m-perf-badge');
+  if(!banner) return;
+
+  // Ritmo actual de la sesion en curso (seg/pieza)
+  const regsActual = state.registros.filter(r=>r.sesionId===s.id);
+  if(regsActual.length === 0){
+    labelEl.textContent = 'Registra piezas para ver tu ritmo';
+    detEl.textContent   = '';
+    badgeEl.textContent = '';
+    return;
+  }
+  const totalPzsCur = regsActual.reduce((a,r)=>a+r.cantidad, 0);
+  const totalSegCur = regsActual.reduce((a,r)=>a+r.duracionSeg, 0);
+  const ritmoActual = totalSegCur / totalPzsCur; // seg por pieza
+
+  // Mejor ritmo historico de la misma operacion (sesiones completas de OTRA sesion)
+  const sesHistoricas = state.sesiones.filter(x=>
+    x.opNombre === s.opNombre && x.estado === 'completa' && x.id !== s.id
+  );
+  let mejorSeg = null;
+  sesHistoricas.forEach(sh=>{
+    const regs = state.registros.filter(r=>r.sesionId===sh.id);
+    if(regs.length>0){
+      const p = regs.reduce((a,r)=>a+r.cantidad,0);
+      const t = regs.reduce((a,r)=>a+r.duracionSeg,0);
+      const r = t/p;
+      if(mejorSeg===null || r<mejorSeg) mejorSeg = r;
+    }
+  });
+
+  const fmtSeg = (s) => s < 60 ? `${Math.round(s)}s/pz` : `${(s/60).toFixed(1)}min/pz`;
+
+  if(mejorSeg === null){
+    // Sin historial, primera vez
+    banner.style.background     = 'var(--card2)';
+    banner.style.borderColor    = 'var(--border2)';
+    iconEl.textContent          = '⚪';
+    labelEl.style.color         = 'var(--dim)';
+    labelEl.textContent         = 'Estableciendo marca personal';
+    detEl.textContent           = `Ritmo actual: ${fmtSeg(ritmoActual)}`;
+    badgeEl.textContent         = '';
+    badgeEl.style.color         = 'var(--dim)';
+    return;
+  }
+
+  const diff     = ritmoActual - mejorSeg;  // positivo = mas lento, negativo = mas rapido
+  const diffPct  = (diff / mejorSeg) * 100;
+  const diffFmt  = fmtSeg(Math.abs(diff));
+
+  if(diffPct > 15){
+    // Rendimiento bajo
+    banner.style.background  = 'rgba(193,85,74,0.12)';
+    banner.style.borderColor = 'rgba(193,85,74,0.5)';
+    iconEl.textContent       = '🔴';
+    labelEl.style.color      = 'var(--red)';
+    labelEl.textContent      = 'Rendimiento bajo';
+    detEl.textContent        = `+${diffFmt} vs tu mejor (${fmtSeg(mejorSeg)})`;
+    badgeEl.textContent      = `+${Math.round(diffPct)}%`;
+    badgeEl.style.color      = 'var(--red)';
+  } else if(diffPct > 0){
+    // Buen tiempo, cerca del mejor
+    banner.style.background  = 'rgba(193,127,62,0.10)';
+    banner.style.borderColor = 'rgba(193,127,62,0.45)';
+    iconEl.textContent       = '🟡';
+    labelEl.style.color      = 'var(--gold)';
+    labelEl.textContent      = 'Buen tiempo';
+    detEl.textContent        = `A ${diffFmt} de tu mejor (${fmtSeg(mejorSeg)})`;
+    badgeEl.textContent      = `+${Math.round(diffPct)}%`;
+    badgeEl.style.color      = 'var(--gold)';
+  } else {
+    // Igual o mejor que el record
+    banner.style.background  = 'rgba(90,159,116,0.12)';
+    banner.style.borderColor = 'rgba(90,159,116,0.5)';
+    iconEl.textContent       = '🚀';
+    labelEl.style.color      = 'var(--green)';
+    labelEl.textContent      = diff < -2 ? '¡Nuevo récord!' : 'En tu mejor ritmo';
+    detEl.textContent        = diff < -2 ? `${diffFmt} más rápido que tu mejor` : `Igualando tu récord (${fmtSeg(mejorSeg)})`;
+    badgeEl.textContent      = diff < -2 ? `−${Math.round(-diffPct)}%` : `≈0%`;
+    badgeEl.style.color      = 'var(--green)';
+  }
 }
 
 function mostrarNextTalla(sCompletada){
