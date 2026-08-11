@@ -384,6 +384,14 @@ nav button.active{color:var(--gold);}
     <div style="font-size:11px;color:var(--dim);margin-bottom:10px;">Segundos que te toma 1 pieza en cada hora. ¡Picos altos significan cansancio o lentitud!</div>
     <div style="position:relative;height:220px;"><canvas id="c-cansancio"></canvas></div>
   </div>
+
+  <div class="chart-card">
+    <h4>Línea de Tiempo del Corte (Timeline)</h4>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:14px;">Mapa de cuándo se realizó cada operación y talla a lo largo de los días</div>
+    <div id="c-timeline-container" style="display:flex;flex-direction:column;gap:12px;margin-top:10px;">
+      <!-- Se llena dinámicamente con las barras de tiempo -->
+    </div>
+  </div>
 </section>
 
 <!-- ========== VISTA CALENDARIO ========== -->
@@ -1566,6 +1574,96 @@ function abrirAnalitica(id){
       scales: { x: { ticks: { display: false } }, y: { beginAtZero: true, ticks: { color: '#a8b2bd' } } }
     }
   }));
+
+  // 5. LÍNEA DE TIEMPO VISUAL (TIMELINE)
+  renderTimelineAnalitica(sesionesCorte, regsCorte);
+}
+
+function renderTimelineAnalitica(sesiones, registros){
+  const container = document.getElementById('c-timeline-container');
+  if(!container) return;
+  container.innerHTML = '';
+
+  // Filtrar solo sesiones con registros
+  const sesionesConDatos = sesiones.filter(s => {
+    const rCount = registros.filter(r => r.sesionId === s.id).length;
+    return rCount > 0;
+  });
+
+  if(sesionesConDatos.length === 0){
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--dim);font-size:13px;">No hay sesiones registradas en este corte aún.</div>`;
+    return;
+  }
+
+  // Ordenar sesiones por su primer registro en el tiempo (cronológico)
+  const sesionesOrdenadas = sesionesConDatos.map(s => {
+    const regs = registros.filter(r => r.sesionId === s.id).sort((a,b)=>a.ts-b.ts);
+    const minTs = regs.length ? regs[0].ts : s.inicioTs;
+    const maxTs = regs.length ? regs[regs.length-1].ts : (s.finTs || minTs);
+    const totalPzs = regs.reduce((a,r)=>a+r.cantidad, 0);
+    const totalSeg = regs.reduce((a,r)=>a+r.duracionSeg, 0);
+    return { s, minTs, maxTs, totalPzs, totalSeg };
+  }).sort((a,b) => a.minTs - b.minTs);
+
+  sesionesOrdenadas.forEach(item => {
+    const dateIni = new Date(item.minTs);
+    const dateFin = new Date(item.maxTs);
+
+    const fmtDate = (d) => {
+      const dia = d.getDate();
+      const mes = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][d.getMonth()];
+      const hora = d.getHours().toString().padStart(2, '0');
+      const min = d.getMinutes().toString().padStart(2, '0');
+      return `${dia} ${mes}, ${hora}:${min}`;
+    };
+
+    const duracionMin = Math.round(item.totalSeg / 60);
+    const ritmoMin = item.totalPzs > 0 ? (item.totalSeg / item.totalPzs / 60).toFixed(1) : 0;
+
+    const div = document.createElement('div');
+    div.style.cssText = `
+      background: var(--card2);
+      border: 1px solid var(--border2);
+      border-radius: var(--rs);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    `;
+
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <span style="font-family:'Oswald',sans-serif;font-size:14px;color:var(--gold);text-transform:uppercase;">${item.s.opNombre}</span>
+          <span style="background:var(--border);color:var(--chalk);font-size:10px;padding:2px 6px;border-radius:3px;margin-left:6px;font-family:'Space Mono';">T. ${item.s.talla}</span>
+        </div>
+        <div style="font-family:'Space Mono',monospace;font-size:12px;color:var(--green);font-weight:700;">
+          ${item.totalPzs} pzs
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="font-size:11px;color:var(--dim);white-space:nowrap;width:70px;">Progreso:</div>
+        <div style="flex:1;background:var(--bg);height:6px;border-radius:3px;overflow:hidden;position:relative;">
+          <div style="background:var(--gold);width:${(item.totalPzs/item.s.meta*100).toFixed(0)}%;height:100%;border-radius:3px;"></div>
+        </div>
+        <div style="font-size:10px;color:var(--dim);font-family:'Space Mono';width:40px;text-align:right;">
+          ${(item.totalPzs/item.s.meta*100).toFixed(0)}%
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--dim);border-top:1px dashed var(--border2);padding-top:6px;margin-top:2px;">
+        <div>
+          📅 <span>${fmtDate(dateIni)}</span> → <span>${fmtDate(dateFin)}</span>
+        </div>
+        <div>
+          ⏱️ <span>${duracionMin} min</span> <span style="color:var(--gold);margin-left:4px;">(${ritmoMin} min/pz)</span>
+        </div>
+      </div>
+    `;
+
+    container.appendChild(div);
+  });
 }
 
 /* ======== RESPALDO DE DATOS ======== */
