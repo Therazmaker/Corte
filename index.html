@@ -385,6 +385,25 @@ nav button.active{color:var(--gold);}
     <div style="position:relative;height:220px;"><canvas id="c-cansancio"></canvas></div>
   </div>
 
+
+
+  <div class="chart-card" id="cal-bloques-tiempo-card">
+    <h4>Mapa Diario de Bloques de Tiempo</h4>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:14px;">Tus actividades distribuidas por día de la semana</div>
+    
+    <!-- Contenedor del Cronograma/Gantt -->
+    <div id="c-bloques-wrapper" style="background:var(--bg); border:1.5px solid var(--border); border-radius:var(--r); padding:16px 12px; display:flex; flex-direction:column; gap:16px; overflow-x:auto;">
+      <!-- Días de cabecera -->
+      <div id="c-bloques-header" style="display:flex; gap:8px; min-width:600px;">
+        <!-- Se llena con columnas de días -->
+      </div>
+      <!-- Listado de filas de operaciones con sus barras de progreso sobre los días -->
+      <div id="c-bloques-rows" style="display:flex; flex-direction:column; gap:12px; min-width:600px; position:relative; min-height:100px;">
+        <!-- Se llena con las barras y operaciones -->
+      </div>
+    </div>
+  </div>
+
   <div class="chart-card">
     <h4>Línea de Tiempo del Corte (Timeline)</h4>
     <div style="font-size:11px;color:var(--dim);margin-bottom:14px;">Mapa de cuándo se realizó cada operación y talla a lo largo de los días</div>
@@ -1577,6 +1596,170 @@ function abrirAnalitica(id){
 
   // 5. LÍNEA DE TIEMPO VISUAL (TIMELINE)
   renderTimelineAnalitica(sesionesCorte, regsCorte);
+
+  // 6. MAPA DIARIO DE BLOQUES DE TIEMPO (GANTT STYLE)
+  renderBloquesTiempo(sesionesCorte, regsCorte);
+}
+
+function renderBloquesTiempo(sesiones, registros){
+  const headerContainer = document.getElementById('c-bloques-header');
+  const rowsContainer = document.getElementById('c-bloques-rows');
+  if(!headerContainer || !rowsContainer) return;
+
+  headerContainer.innerHTML = '';
+  rowsContainer.innerHTML = '';
+
+  const sesionesConDatos = sesiones.filter(s => registros.some(r => r.sesionId === s.id));
+  if(sesionesConDatos.length === 0){
+    rowsContainer.innerHTML = `<div style="text-align:center;padding:20px;color:var(--dim);font-size:13px;">Sin datos suficientes para graficar bloques.</div>`;
+    return;
+  }
+
+  // Encontrar rango de fechas de trabajo de este corte
+  let minTs = Infinity, maxTs = -Infinity;
+  sesionesConDatos.forEach(s => {
+    const regs = registros.filter(r => r.sesionId === s.id);
+    regs.forEach(r => {
+      if(r.ts < minTs) minTs = r.ts;
+      if(r.ts > maxTs) maxTs = r.ts;
+    });
+  });
+
+  if(minTs === Infinity) { minTs = Date.now(); maxTs = Date.now(); }
+
+  // Normalizar fechas a inicio del día local
+  const startDay = new Date(minTs); startDay.setHours(0,0,0,0);
+  const endDay = new Date(maxTs); endDay.setHours(0,0,0,0);
+
+  // Generar lista de días en el rango
+  const diasRango = [];
+  let curr = new Date(startDay);
+  while(curr <= endDay){
+    diasRango.push(new Date(curr));
+    curr.setDate(curr.getDate() + 1);
+  }
+
+  // Si hay menos de 5 días en el rango, extender para que se vea como el planificador
+  while(diasRango.length < 5){
+    const last = new Date(diasRango[diasRango.length-1]);
+    last.setDate(last.getDate() + 1);
+    diasRango.push(last);
+  }
+
+  const totalDias = diasRango.length;
+
+  // Renderizar la cabecera de los días (Domingo 8/9, Lunes 8/10, etc.)
+  const nombresDias = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  
+  // Agregar espacio vacío a la izquierda del header para alinear con las etiquetas de operaciones
+  const labelSpacer = document.createElement('div');
+  labelSpacer.style.cssText = 'width:120px; flex-shrink:0;';
+  headerContainer.appendChild(labelSpacer);
+
+  diasRango.forEach((d, idx) => {
+    const colHeader = document.createElement('div');
+    colHeader.style.cssText = `
+      flex: 1;
+      min-width: 90px;
+      background: var(--card);
+      border: 1px solid var(--border2);
+      border-radius: var(--rs);
+      padding: 6px 4px;
+      text-align: center;
+      font-size: 11px;
+    `;
+    // Si coincide con el día de hoy, marcar de verde como en tu imagen
+    const hoy = new Date();
+    const esHoy = d.getDate() === hoy.getDate() && d.getMonth() === hoy.getMonth() && d.getFullYear() === hoy.getFullYear();
+    if(esHoy){
+      colHeader.style.background = 'rgba(90,159,116,0.15)';
+      colHeader.style.borderColor = 'var(--green)';
+      colHeader.style.color = 'var(--green)';
+    }
+
+    colHeader.innerHTML = `
+      <div style="font-family:'Oswald',sans-serif; text-transform:uppercase; font-size:10px; color:var(--dim);">${nombresDias[d.getDay()]}</div>
+      <div style="font-family:'Space Mono'; font-weight:700; margin-top:2px;">${d.getMonth()+1}/${d.getDate()}</div>
+    `;
+    headerContainer.appendChild(colHeader);
+  });
+
+  // Agrupar sesiones por operacion + talla
+  const opsTallasMap = {};
+  sesionesConDatos.forEach(s => {
+    const key = `${s.opNombre} (T. ${s.talla})`;
+    opsTallasMap[key] = s;
+  });
+
+  // Dibujar cada fila de operacion
+  Object.keys(opsTallasMap).forEach(key => {
+    const s = opsTallasMap[key];
+    const regs = registros.filter(r => r.sesionId === s.id).sort((a,b)=>a.ts-b.ts);
+    if(regs.length === 0) return;
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; align-items:center; gap:8px;';
+
+    // Etiqueta izquierda
+    const label = document.createElement('div');
+    label.style.cssText = `
+      width: 120px;
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      color: var(--chalk);
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-shrink: 0;
+    `;
+    label.textContent = key;
+    row.appendChild(label);
+
+    // Contenedor de la barra que ocupa todo el ancho de los días
+    const barContainer = document.createElement('div');
+    barContainer.style.cssText = 'flex:1; display:flex; gap:8px; height:28px; background:rgba(255,255,255,0.02); border-radius:4px; position:relative;';
+
+    // Para cada día, calcular si se trabajó y pintar la barra
+    diasRango.forEach((d, idx) => {
+      const dayStart = d.getTime();
+      const dayEnd = dayStart + 24*60*60*1000;
+
+      // Filtrar registros que caigan en este día
+      const regsDia = regs.filter(r => r.ts >= dayStart && r.ts < dayEnd);
+      const cell = document.createElement('div');
+      cell.style.cssText = 'flex:1; min-width:90px; position:relative;';
+
+      if(regsDia.length > 0){
+        const totalPzsDia = regsDia.reduce((a,r)=>a+r.cantidad, 0);
+        // Barra estilo juego (bordes redondeados, verde brillante estilo tu foto)
+        const barBlock = document.createElement('div');
+        barBlock.style.cssText = `
+          position: absolute;
+          inset: 3px 0;
+          background: linear-gradient(90deg, #5a9f74, #73bf8f);
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+          border: 1px solid rgba(255,255,255,0.15);
+        `;
+        barBlock.innerHTML = `
+          <span style="font-family:'Space Mono'; font-size:10px; font-weight:700; color:var(--bg); text-shadow:0 1px 1px rgba(255,255,255,0.5);">${totalPzsDia} pzs</span>
+        `;
+        cell.appendChild(barBlock);
+      } else {
+        // Celda vacía punteada
+        cell.style.borderRight = '1px dashed rgba(255,255,255,0.05)';
+      }
+
+      barContainer.appendChild(cell);
+    });
+
+    row.appendChild(barContainer);
+    rowsContainer.appendChild(row);
+  });
 }
 
 function renderTimelineAnalitica(sesiones, registros){
