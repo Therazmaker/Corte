@@ -132,6 +132,7 @@ nav button.active{color:var(--gold);}
 .mf-btn{flex:1; padding:15px 0; border:none; border-radius:var(--rs); font-family:'Oswald',sans-serif; font-weight:700; font-size:13px; cursor:pointer;}
 .mf-pause{background:var(--card2);color:var(--dim);border:1.5px solid var(--border2);}
 .mf-end{background:rgba(193,85,74,.12);color:var(--red);border:1.5px solid rgba(193,85,74,.3);}
+.mf-undo{background:rgba(193,127,62,.10);color:var(--gold);border:1.5px solid rgba(193,127,62,.35);flex:0 0 auto;padding:15px 18px;}
 
 /* ===== CALENDARIO ===== */
 .calendar-grid {
@@ -493,6 +494,7 @@ nav button.active{color:var(--gold);}
     </div>
   </div>
   <div class="modal-ftr">
+    <button class="mf-btn mf-undo" onclick="deshacerUltimoLote()" id="m-undo-btn" style="display:none;">↩ Deshacer</button>
     <button class="mf-btn mf-pause" onclick="pausarSesion()">⏸ Pausar</button>
     <button class="mf-btn mf-end" onclick="forzarTermino()">⚡ Forzar Término</button>
   </div>
@@ -818,6 +820,7 @@ function reanudarSesion(id){
   const s = state.sesiones.find(x=>x.id===id);
   if(s){
     s.estado = 'activa';
+    s.reanudadoTs = Date.now(); // marca cuando se reanudo para excluir tiempo de pausa
     saveState();
     openModal();
   }
@@ -1121,6 +1124,13 @@ function renderModal(){
   const b5=document.getElementById('m-sec5'); b5.textContent=rest>=5?'+5':(rest>0?'+'+rest:'✓'); b5.disabled=rest<=0; b5.onclick=()=>registrarLote(cap5);
   const b20=document.getElementById('m-sec20'); b20.textContent=rest>=20?'+20':(rest>0?'+'+rest:'✓'); b20.disabled=rest<=0; b20.onclick=()=>registrarLote(cap20);
   document.getElementById('m-manual').onclick=()=>registrarLote(parseInt(prompt(`Piezas (quedan ${rest}):`),10)||0);
+
+  // Mostrar botón deshacer solo si hay registros en esta sesión
+  const undoBtn = document.getElementById('m-undo-btn');
+  if(undoBtn){
+    const regsActual = state.registros.filter(r=>r.sesionId===s.id);
+    undoBtn.style.display = regsActual.length > 0 ? '' : 'none';
+  }
   
   actualizarGrafico(s);
 }
@@ -1130,9 +1140,14 @@ function registrarLote(cant){
   const hAntes=piezasHechas(s.id), rest=s.meta-hAntes, c=Math.min(cant,rest);
   if(c<=0)return;
   const regs=state.registros.filter(r=>r.sesionId===s.id).sort((a,b)=>a.ts-b.ts);
-  const lastTs=regs.length?regs[regs.length-1].ts:s.inicioTs;
-  const now=Date.now(), durSeg=Math.max(1,Math.round((now-lastTs)/1000));
-  state.registros.push({id:uid(), sesionId:s.id, ts:now, cantidad:c, duracionSeg:durSeg});
+  const lastRegTs = regs.length ? regs[regs.length-1].ts : s.inicioTs;
+  // Si hubo pausa, usamos el momento de reanudar para no contar el descanso
+  const refTs = s.reanudadoTs && s.reanudadoTs > lastRegTs ? s.reanudadoTs : lastRegTs;
+  const now=Date.now(), durSeg=Math.max(1,Math.round((now-refTs)/1000));
+  const nuevoReg = {id:uid(), sesionId:s.id, ts:now, cantidad:c, duracionSeg:durSeg};
+  state.registros.push(nuevoReg);
+  // Limpiar reanudadoTs una vez usado (el siguiente lote ya usará este ts como referencia)
+  delete s.reanudadoTs;
   if(hAntes+c>=s.meta){ s.estado='completa'; s.finTs=now; }
   saveState();
   
@@ -1152,6 +1167,25 @@ function registrarLote(cant){
     }
   };
   requestAnimationFrame(step);
+}
+
+function deshacerUltimoLote(){
+  const s = getActiva();
+  if(!s) return;
+  const regs = state.registros
+    .filter(r=>r.sesionId===s.id)
+    .sort((a,b)=>a.ts-b.ts);
+  if(regs.length === 0) return;
+  const ultimo = regs[regs.length-1];
+  if(!confirm(`¿Deshacer el último registro de ${ultimo.cantidad} pzs?`)) return;
+  state.registros = state.registros.filter(r=>r.id !== ultimo.id);
+  // Si la sesión quedó marcada completa, revertir a activa
+  if(s.estado === 'completa'){
+    s.estado = 'activa';
+    delete s.finTs;
+  }
+  saveState();
+  renderModal();
 }
 
 function actualizarBannerRendimiento(s){
