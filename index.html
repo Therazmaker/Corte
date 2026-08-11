@@ -1595,74 +1595,127 @@ function renderTimelineAnalitica(sesiones, registros){
     return;
   }
 
-  // Ordenar sesiones por su primer registro en el tiempo (cronológico)
-  const sesionesOrdenadas = sesionesConDatos.map(s => {
+  // Agrupar sesiones por nombre de operación
+  const opsGrupos = {};
+  sesionesConDatos.forEach(s => {
     const regs = registros.filter(r => r.sesionId === s.id).sort((a,b)=>a.ts-b.ts);
     const minTs = regs.length ? regs[0].ts : s.inicioTs;
     const maxTs = regs.length ? regs[regs.length-1].ts : (s.finTs || minTs);
     const totalPzs = regs.reduce((a,r)=>a+r.cantidad, 0);
     const totalSeg = regs.reduce((a,r)=>a+r.duracionSeg, 0);
-    return { s, minTs, maxTs, totalPzs, totalSeg };
-  }).sort((a,b) => a.minTs - b.minTs);
 
-  sesionesOrdenadas.forEach(item => {
-    const dateIni = new Date(item.minTs);
-    const dateFin = new Date(item.maxTs);
+    if(!opsGrupos[s.opNombre]) {
+      opsGrupos[s.opNombre] = [];
+    }
+    opsGrupos[s.opNombre].push({ s, minTs, maxTs, totalPzs, totalSeg });
+  });
 
-    const fmtDate = (d) => {
-      const dia = d.getDate();
-      const mes = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][d.getMonth()];
-      const hora = d.getHours().toString().padStart(2, '0');
-      const min = d.getMinutes().toString().padStart(2, '0');
-      return `${dia} ${mes}, ${hora}:${min}`;
+  const fmtDate = (d) => {
+    const dia = d.getDate();
+    const mes = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][d.getMonth()];
+    const hora = d.getHours().toString().padStart(2, '0');
+    const min = d.getMinutes().toString().padStart(2, '0');
+    return `${dia} ${mes}, ${hora}:${min}`;
+  };
+
+  // Crear un acordión/pestaña colapsable por cada operación
+  Object.keys(opsGrupos).forEach((opNombre, idx) => {
+    const sesDeOp = opsGrupos[opNombre].sort((a,b) => a.minTs - b.minTs);
+    const totalPzsOp = sesDeOp.reduce((a,x) => a + x.totalPzs, 0);
+    const totalMetaOp = sesDeOp.reduce((a,x) => a + x.s.meta, 0);
+    const pctOp = totalMetaOp > 0 ? Math.min(100, Math.round((totalPzsOp/totalMetaOp)*100)) : 0;
+    
+    // Id único para colapsar
+    const opId = `op-collapse-${idx}`;
+
+    const mainCard = document.createElement('div');
+    mainCard.className = 'card';
+    mainCard.style.cssText = 'margin-bottom:12px; padding:0; overflow:hidden; border-color:var(--border2);';
+
+    // Header del acordión clickable
+    const header = document.createElement('div');
+    header.style.cssText = 'padding:14px 16px; background:var(--card); display:flex; justify-content:space-between; align-items:center; cursor:pointer; user-select:none;';
+    header.onclick = () => {
+      const body = document.getElementById(opId);
+      const arrow = document.getElementById(opId + '-arrow');
+      if(body.style.display === 'none'){
+        body.style.display = 'block';
+        arrow.style.transform = 'rotate(90deg)';
+      } else {
+        body.style.display = 'none';
+        arrow.style.transform = 'rotate(0deg)';
+      }
     };
 
-    const duracionMin = Math.round(item.totalSeg / 60);
-    const ritmoMin = item.totalPzs > 0 ? (item.totalSeg / item.totalPzs / 60).toFixed(1) : 0;
-
-    const div = document.createElement('div');
-    div.style.cssText = `
-      background: var(--card2);
-      border: 1px solid var(--border2);
-      border-radius: var(--rs);
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    `;
-
-    div.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-        <div>
-          <span style="font-family:'Oswald',sans-serif;font-size:14px;color:var(--gold);text-transform:uppercase;">${item.s.opNombre}</span>
-          <span style="background:var(--border);color:var(--chalk);font-size:10px;padding:2px 6px;border-radius:3px;margin-left:6px;font-family:'Space Mono';">T. ${item.s.talla}</span>
+    header.innerHTML = `
+      <div style="flex:1; min-width:0; padding-right:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span id="${opId}-arrow" style="color:var(--gold); transition: transform 0.2s ease; display:inline-block; font-size:12px; transform:rotate(0deg);">▶</span>
+          <span style="font-family:'Oswald',sans-serif; font-size:15px; color:var(--chalk); text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${opNombre}</span>
         </div>
-        <div style="font-family:'Space Mono',monospace;font-size:12px;color:var(--green);font-weight:700;">
-          ${item.totalPzs} pzs
+        <div style="font-size:11px; color:var(--dim); margin-top:3px; padding-left:18px;">
+          ${sesDeOp.length} tallas trabajadas (${totalPzsOp} / ${totalMetaOp} pzs)
         </div>
       </div>
-
-      <div style="display:flex;align-items:center;gap:8px;">
-        <div style="font-size:11px;color:var(--dim);white-space:nowrap;width:70px;">Progreso:</div>
-        <div style="flex:1;background:var(--bg);height:6px;border-radius:3px;overflow:hidden;position:relative;">
-          <div style="background:var(--gold);width:${(item.totalPzs/item.s.meta*100).toFixed(0)}%;height:100%;border-radius:3px;"></div>
-        </div>
-        <div style="font-size:10px;color:var(--dim);font-family:'Space Mono';width:40px;text-align:right;">
-          ${(item.totalPzs/item.s.meta*100).toFixed(0)}%
-        </div>
-      </div>
-
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--dim);border-top:1px dashed var(--border2);padding-top:6px;margin-top:2px;">
-        <div>
-          📅 <span>${fmtDate(dateIni)}</span> → <span>${fmtDate(dateFin)}</span>
-        </div>
-        <div>
-          ⏱️ <span>${duracionMin} min</span> <span style="color:var(--gold);margin-left:4px;">(${ritmoMin} min/pz)</span>
+      <div style="text-align:right;">
+        <div style="font-family:'Space Mono',monospace; font-size:14px; font-weight:700; color:var(--gold);">${pctOp}%</div>
+        <div style="width:60px; background:var(--bg); height:4px; border-radius:2px; overflow:hidden; margin-top:4px;">
+          <div style="background:var(--gold); width:${pctOp}%; height:100%;"></div>
         </div>
       </div>
     `;
 
-    container.appendChild(div);
+    // Contenido expandible
+    const body = document.createElement('div');
+    body.id = opId;
+    body.style.cssText = 'padding:0 16px 14px; background:var(--card2); border-top:1.5px solid var(--border); display:none;';
+
+    // Lista de sub-sesiones (tallas)
+    sesDeOp.forEach(item => {
+      const dateIni = new Date(item.minTs);
+      const dateFin = new Date(item.maxTs);
+      const duracionMin = Math.round(item.totalSeg / 60);
+      const ritmoMin = item.totalPzs > 0 ? (item.totalSeg / item.totalPzs / 60).toFixed(1) : 0;
+      const subPct = item.s.meta > 0 ? Math.min(100, Math.round((item.totalPzs/item.s.meta)*100)) : 0;
+
+      const row = document.createElement('div');
+      row.style.cssText = 'padding:12px 0; border-bottom:1px dashed var(--border2);';
+      
+      row.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <div>
+            <span style="background:var(--border); color:var(--chalk); font-size:10.5px; padding:2.5px 7px; border-radius:3px; font-family:'Space Mono'; font-weight:700;">Talla ${item.s.talla}</span>
+          </div>
+          <div style="font-family:'Space Mono',monospace; font-size:12px; color:var(--green); font-weight:700;">
+            ${item.totalPzs} pzs <span style="color:var(--dim); font-size:10px; font-weight:normal;">/ ${item.s.meta}</span>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+          <div style="flex:1; background:var(--bg); height:5px; border-radius:2.5px; overflow:hidden;">
+            <div style="background:var(--gold); width:${subPct}%; height:100%;"></div>
+          </div>
+          <div style="font-size:10px; color:var(--dim); font-family:'Space Mono'; width:32px; text-align:right;">
+            ${subPct}%
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:10px; color:var(--dim);">
+          <div>📅 ${fmtDate(dateIni)} → ${fmtDate(dateFin)}</div>
+          <div>⏱️ ${duracionMin}m <span style="color:var(--gold); margin-left:3px;">(${ritmoMin}m/pz)</span></div>
+        </div>
+      `;
+      body.appendChild(row);
+    });
+
+    // Remover borde punteado del último elemento del body
+    if(body.lastChild) {
+      body.lastChild.style.borderBottom = 'none';
+    }
+
+    mainCard.appendChild(header);
+    mainCard.appendChild(body);
+    container.appendChild(mainCard);
   });
 }
 
