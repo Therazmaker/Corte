@@ -609,7 +609,20 @@ nav button.active{color:var(--gold);}
         <div style="font-size:10px;color:var(--dim);text-transform:uppercase;">Velocidad Promedio (pzs/hr)</div>
       </div>
     </div>
-    <button class="btn-primary" style="margin-top:0;" onclick="cerrarResultado()">Cerrar</button>
+    
+    <!-- Panel del editor de registros (oculto por defecto) -->
+    <div id="rm-editor-seccion" style="display:none; border-top:1.5px dashed var(--border); padding-top:15px; margin-top:15px; max-height:220px; overflow-y:auto;">
+      <div style="font-family:'Oswald',sans-serif; font-size:12px; color:var(--gold); text-transform:uppercase; margin-bottom:10px; text-align:left;">✏️ Modificar Duración de Lotes</div>
+      <div id="rm-editor-lista" style="display:flex; flex-direction:column; gap:8px;">
+        <!-- Se llena con inputs de registros -->
+      </div>
+      <button class="btn-primary" style="margin-top:14px; background:var(--green); border-color:var(--green);" onclick="guardarEdicionRegistros()">Guardar Cambios</button>
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:10px;">
+      <button class="btn-secondary" style="margin:0; flex:1;" id="rm-btn-editar-logs" onclick="abrirEditorLogs()">✏️ Editar Lotes</button>
+      <button class="btn-primary" style="margin:0; flex:1;" onclick="cerrarResultado()">Cerrar</button>
+    </div>
   </div>
 </div>
 
@@ -892,12 +905,127 @@ function reanudarSesion(id){
   }
 }
 
+// Variables para edición de registros pasados
+let rmSesionesEdicionActiva = [];
+let rmTallaSeleccionadaEditor = 'Todas';
+
+function abrirEditorLogs(){
+  const editorSeccion = document.getElementById('rm-editor-seccion');
+  const btnEditar = document.getElementById('rm-btn-editar-logs');
+  
+  if(editorSeccion.style.display === 'none') {
+    editorSeccion.style.display = 'block';
+    btnEditar.textContent = '❌ Cancelar Edición';
+    renderEditorRegistros();
+  } else {
+    editorSeccion.style.display = 'none';
+    btnEditar.textContent = '✏️ Editar Lotes';
+  }
+}
+
+function renderEditorRegistros(){
+  const listaContainer = document.getElementById('rm-editor-lista');
+  if(!listaContainer) return;
+  listaContainer.innerHTML = '';
+
+  // Obtener registros de las sesiones cargadas en el modal según la talla seleccionada
+  let registrosFiltrados = [];
+  rmSesionesEdicionActiva.forEach(s => {
+    const regs = state.registros.filter(r => r.sesionId === s.id);
+    regs.forEach(r => {
+      registrosFiltrados.push({ r, s });
+    });
+  });
+
+  // Ordenar cronológicamente
+  registrosFiltrados.sort((a,b) => a.r.ts - b.r.ts);
+
+  if(registrosFiltrados.length === 0){
+    listaContainer.innerHTML = `<div style="text-align:center;font-size:11px;color:var(--dim);">No hay lotes para editar.</div>`;
+    return;
+  }
+
+  registrosFiltrados.forEach(item => {
+    const date = new Date(item.r.ts);
+    const horaStr = `${date.getHours()}:${String(date.getMinutes()).padStart(2,'0')}`;
+    const minDur = Math.round(item.r.duracionSeg / 60);
+
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--card2); padding:8px 10px; border-radius:var(--rs); border:1px solid var(--border2);';
+    div.innerHTML = `
+      <div style="text-align:left;">
+        <span style="font-family:'Space Mono'; font-size:11px; font-weight:700; color:var(--green);">${item.r.cantidad} pzs</span>
+        <div style="font-size:9.5px; color:var(--dim); margin-top:2px;">Talla ${item.s.talla || 'Global'} ⋅ ${horaStr}</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <input type="number" class="rm-edit-input" data-reg-id="${item.r.id}" value="${minDur}" min="1" style="
+          width: 54px;
+          background: var(--bg);
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          color: var(--chalk);
+          font-family: 'Space Mono', monospace;
+          font-size: 12px;
+          text-align: center;
+          padding: 4px 2px;
+        ">
+        <span style="font-size:11px; color:var(--dim);">min</span>
+      </div>
+    `;
+    listaContainer.appendChild(div);
+  });
+}
+
+function guardarEdicionRegistros(){
+  const inputs = document.querySelectorAll('.rm-edit-input');
+  let modificados = 0;
+
+  inputs.forEach(input => {
+    const regId = input.getAttribute('data-reg-id');
+    const nuevosMins = parseInt(input.value, 10);
+    if(isNaN(nuevosMins) || nuevosMins < 1) return;
+
+    const reg = state.registros.find(r => r.id === regId);
+    if(reg) {
+      const nuevaDuracionSeg = nuevosMins * 60;
+      if(reg.duracionSeg !== nuevaDuracionSeg) {
+        reg.duracionSeg = nuevaDuracionSeg;
+        modificados++;
+      }
+    }
+  });
+
+  if(modificados > 0){
+    saveState();
+    alert(`Se actualizaron ${modificados} lotes correctamente.`);
+    
+    // Ocultar sección de edición
+    document.getElementById('rm-editor-seccion').style.display = 'none';
+    document.getElementById('rm-btn-editar-logs').textContent = '✏️ Editar Lotes';
+
+    // Recargar el gráfico y números del modal
+    const op = document.getElementById('rm-op').textContent;
+    // Encontrar corteId actual
+    const activa = getActiva();
+    const corteId = activa ? activa.corteId : (state.cortes.length ? state.cortes[state.cortes.length-1].id : 'corte_legado');
+    verResultado(op, corteId);
+  } else {
+    alert('No se detectaron cambios en las duraciones.');
+  }
+}
+
 let rmChartObj = null;
 
 function verResultado(opNombre, corteId){
+  // Ocultar panel de edición si estaba abierto
+  document.getElementById('rm-editor-seccion').style.display = 'none';
+  document.getElementById('rm-btn-editar-logs').textContent = '✏️ Editar Lotes';
+
   const sesiones = state.sesiones.filter(s=>s.opNombre===opNombre && (s.corteId===corteId || s.corteId==='corte_legado' && corteId==='corte_legado') && s.estado==='completa');
   if(sesiones.length===0) return;
   
+  rmSesionesEdicionActiva = sesiones; // Guardar referencia para el editor
+
   document.getElementById('rm-op').textContent = opNombre;
   
   const corte = state.cortes.find(x => x.id === corteId);
@@ -909,6 +1037,16 @@ function verResultado(opNombre, corteId){
   
   const actualizarPanelTalla = (tallaTarget) => {
     selectedTalla = tallaTarget;
+    rmTallaSeleccionadaEditor = tallaTarget;
+
+    // Si el editor de logs está visible, redibujarlo con la selección de la talla
+    if(document.getElementById('rm-editor-seccion').style.display === 'block'){
+      // Filtrar sesiones de edición activa
+      rmSesionesEdicionActiva = tallaTarget === 'Todas' ? sesiones : sesiones.filter(s => s.talla === tallaTarget);
+      renderEditorRegistros();
+    } else {
+      rmSesionesEdicionActiva = sesiones; // reiniciar
+    }
     
     // Resaltar el chip seleccionado
     const chips = chipsContainer.querySelectorAll('.chip');
