@@ -405,6 +405,14 @@ nav button.active{color:var(--gold);}
   </div>
 
   <div class="chart-card">
+    <h4>Bitácora de Incidentes de Ritmo</h4>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:12px;">Notas y reportes de demora registrados durante las operaciones</div>
+    <div id="c-incidentes-list" style="display:flex;flex-direction:column;gap:8px;">
+      <!-- Se llena dinámicamente con incidentes de demora -->
+    </div>
+  </div>
+
+  <div class="chart-card">
     <h4>Línea de Tiempo del Corte (Timeline)</h4>
     <div style="font-size:11px;color:var(--dim);margin-bottom:14px;">Mapa de cuándo se realizó cada operación y talla a lo largo de los días</div>
     <div id="c-timeline-container" style="display:flex;flex-direction:column;gap:12px;margin-top:10px;">
@@ -508,6 +516,33 @@ nav button.active{color:var(--gold);}
           <div id="m-perf-detail" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--dim);margin-top:2px;"></div>
         </div>
         <div id="m-perf-badge" style="font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:var(--dim);"></div>
+      </div>
+
+      </div>
+
+      <!-- Banner de notas e incidencias del lote activo -->
+      <div id="m-note-box" style="
+        border-radius:var(--rs);
+        padding:8px 12px;
+        margin:8px 0;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        border:1px solid rgba(193,127,62,0.2);
+        background:rgba(193,127,62,0.03);
+      ">
+        <span id="m-note-text" style="font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">Sin incidentes en este lote</span>
+        <button onclick="agregarNotaLoteActivo()" style="
+          background:var(--border2);
+          border:none;
+          color:var(--gold);
+          font-family:'Oswald',sans-serif;
+          font-size:10px;
+          padding:4px 8px;
+          border-radius:3px;
+          cursor:pointer;
+          text-transform:uppercase;
+        ">⚠️ Reportar Demora</button>
       </div>
 
       <div id="m-eta-box" style="text-align:center;padding:10px 0 4px;border-top:1px dashed var(--border2);margin-top:4px;"></div>
@@ -1101,6 +1136,13 @@ function renderModal(){
   document.getElementById('m-count').textContent=h;
   document.getElementById('m-meta').textContent='/ '+s.meta;
   document.getElementById('m-fill').style.width=Math.min(100,pct)+'%';
+
+  // Mostrar nota temporal si hay alguna guardada en la recámara
+  const noteText = document.getElementById('m-note-text');
+  if(noteText) {
+    noteText.textContent = s.ultimaNota ? `Próximo lote: "${s.ultimaNota}"` : "Sin incidentes en este lote";
+    noteText.style.color = s.ultimaNota ? "var(--gold)" : "var(--dim)";
+  }
   
   // --- ETA de tallas restantes ---
   const corte = state.cortes.find(x=>x.id===s.corteId);
@@ -1168,12 +1210,49 @@ function registrarLote(cant){
   if(c<=0)return;
   const regs=state.registros.filter(r=>r.sesionId===s.id).sort((a,b)=>a.ts-b.ts);
   const lastRegTs = regs.length ? regs[regs.length-1].ts : s.inicioTs;
+  
   // Si hubo pausa, usamos el momento de reanudar para no contar el descanso
   const refTs = s.reanudadoTs && s.reanudadoTs > lastRegTs ? s.reanudadoTs : lastRegTs;
-  const now=Date.now(), durSeg=Math.max(1,Math.round((now-refTs)/1000));
+  const now=Date.now();
+  let durSeg=Math.max(1,Math.round((now-refTs)/1000));
+
+  // --- CORRECCIÓN AUTOMÁTICA DE EXTREMOS (OLVIDO DE PAUSA) ---
+  // Obtener velocidad histórica de esta operación
+  const sesHistoricas = state.sesiones.filter(x=> x.opNombre === s.opNombre && x.estado === 'completa');
+  let avgSegPz = 30; // default razonable (30 seg por pieza)
+  let conteoHist = 0;
+  sesHistoricas.forEach(sh=>{
+    const shRegs = state.registros.filter(r=>r.sesionId===sh.id);
+    if(shRegs.length > 0){
+      const p = shRegs.reduce((a,r)=>a+r.cantidad, 0);
+      const t = shRegs.reduce((a,r)=>a+r.duracionSeg, 0);
+      if(p>0){
+        avgSegPz = (avgSegPz * conteoHist + (t/p)) / (conteoHist + 1);
+        conteoHist++;
+      }
+    }
+  });
+
+  const tiempoEstimadoNormal = c * avgSegPz;
+  // Si la duración registrada supera por 4 veces el tiempo estimado normal, y es mayor a 5 minutos (300s)
+  if(durSeg > tiempoEstimadoNormal * 4 && durSeg > 300) {
+    const durOriginal = durSeg;
+    durSeg = Math.round(tiempoEstimadoNormal * 1.2); // Le asignamos el promedio normal + 20% de tolerancia
+    console.log(`[Corrección] Olvido de pausa detectado. Reducido de ${durOriginal}s a ${durSeg}s para ${c} pzs.`);
+    
+    // Auto-marcar incidencia de olvido
+    s.ultimaNota = "Olvido de Pausa (Corregido automáticamente)";
+  }
+  // -----------------------------------------------------------
+
   const nuevoReg = {id:uid(), sesionId:s.id, ts:now, cantidad:c, duracionSeg:durSeg};
+  if(s.ultimaNota) {
+    nuevoReg.nota = s.ultimaNota;
+    delete s.ultimaNota; // consumir nota
+  }
   state.registros.push(nuevoReg);
-  // Limpiar reanudadoTs una vez usado (el siguiente lote ya usará este ts como referencia)
+
+  // Limpiar reanudadoTs una vez usado
   delete s.reanudadoTs;
   if(hAntes+c>=s.meta){ s.estado='completa'; s.finTs=now; }
   saveState();
@@ -1599,6 +1678,88 @@ function abrirAnalitica(id){
 
   // 6. MAPA DIARIO DE BLOQUES DE TIEMPO (GANTT STYLE)
   renderBloquesTiempo(sesionesCorte, regsCorte);
+
+  // 7. BITÁCORA DE INCIDENTES
+  renderIncidentesAnalitica(sesionesCorte, regsCorte);
+}
+
+function renderIncidentesAnalitica(sesiones, registros){
+  const container = document.getElementById('c-incidentes-list');
+  if(!container) return;
+  container.innerHTML = '';
+
+  const regsConNota = registros.filter(r => r.nota);
+
+  if(regsConNota.length === 0){
+    container.innerHTML = `<div style="text-align:center;padding:16px;color:var(--dim);font-size:12px;">No se han reportado demoras o incidentes en este corte.</div>`;
+    return;
+  }
+
+  // Ordenar cronológicamente descendente (más recientes primero)
+  regsConNota.sort((a,b)=>b.ts - a.ts);
+
+  regsConNota.forEach(r => {
+    const s = sesiones.find(x => x.id === r.sesionId);
+    if(!s) return;
+
+    const date = new Date(r.ts);
+    const fmt = `${date.getDate()}/${date.getMonth()+1} ${date.getHours()}:${String(date.getMinutes()).padStart(2,'0')}`;
+
+    const item = document.createElement('div');
+    item.style.cssText = `
+      background:rgba(193,85,74,0.04);
+      border:1px solid rgba(193,85,74,0.2);
+      border-radius:var(--rs);
+      padding:10px 14px;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    `;
+
+    item.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;">
+        <span style="font-family:'Oswald',sans-serif;color:var(--red);text-transform:uppercase;letter-spacing:0.04em;">⚠️ ${s.opNombre} (T. ${s.talla})</span>
+        <span style="font-family:'Space Mono';color:var(--dim);">${fmt}</span>
+      </div>
+      <div style="font-size:13px;color:var(--chalk);font-weight:bold;margin-top:2px;">"${r.nota}"</div>
+      <div style="font-size:10px;color:var(--dim);margin-top:2px;font-family:'Space Mono';">
+        Impacto: ${r.cantidad} piezas completadas en ${Math.round(r.duracionSeg/60)} minutos (${(r.duracionSeg/r.cantidad).toFixed(1)}s/pieza)
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+function agregarNotaLoteActivo(){
+  const s = getActiva();
+  if(!s) return;
+
+  const incidentesPredefinidos = [
+    "Hilo roto / Enhebrado de aguja",
+    "Falla en máquina / Ajuste de tensión",
+    "Telas mal cortadas / Alineación",
+    "Descanso / Almuerzo rápido",
+    "Llamada / Interrupción externa",
+    "Cambio de cono / material"
+  ];
+
+  let promptMsg = "Selecciona el número del incidente o escribe uno propio:\n\n";
+  incidentesPredefinidos.forEach((inc, idx) => {
+    promptMsg += `${idx + 1}. ${inc}\n`;
+  });
+  promptMsg += "\nEscribe cualquier otra razón:";
+
+  const res = prompt(promptMsg);
+  if(res === null) return;
+
+  const parseNum = parseInt(res, 10);
+  if(!isNaN(parseNum) && parseNum >= 1 && parseNum <= incidentesPredefinidos.length) {
+    s.ultimaNota = incidentesPredefinidos[parseNum - 1];
+  } else if(res.trim().length > 0) {
+    s.ultimaNota = res.trim();
+  }
+
+  renderModal();
 }
 
 function renderBloquesTiempo(sesiones, registros){
