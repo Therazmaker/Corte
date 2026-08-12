@@ -387,20 +387,28 @@ nav button.active{color:var(--gold);}
 
 
 
-  <div class="chart-card" id="cal-bloques-tiempo-card">
-    <h4>Mapa Diario de Bloques de Tiempo</h4>
-    <div style="font-size:11px;color:var(--dim);margin-bottom:14px;">Tus actividades distribuidas por día de la semana</div>
+  <div class="chart-card" id="cal-bloques-tiempo-card" style="overflow-x:auto; padding: 12px 14px;">
+    <h4>Mapa Semanal de Horas Trabajadas</h4>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:14px;">Distribución y duración real de tus tareas costuradas durante la semana</div>
     
-    <!-- Contenedor del Cronograma/Gantt -->
-    <div id="c-bloques-wrapper" style="background:var(--bg); border:1.5px solid var(--border); border-radius:var(--r); padding:16px 12px; display:flex; flex-direction:column; gap:16px; overflow-x:auto;">
-      <!-- Días de cabecera -->
-      <div id="c-bloques-header" style="display:flex; gap:8px; min-width:600px;">
-        <!-- Se llena con columnas de días -->
+    <div id="weekly-real-scheduler-wrapper" style="min-width: 700px; background: var(--bg); border: 1.5px solid var(--border2); border-radius: var(--r); padding: 12px; position: relative;">
+      
+      <!-- Fila Superior de Días -->
+      <div id="real-scheduler-days-header" style="display: grid; grid-template-columns: 80px repeat(6, 1fr); border-bottom: 2px solid var(--border); padding-bottom: 8px; text-align: center;">
+        <div style="font-family:'Oswald',sans-serif; color:var(--dim); font-size:11px; text-transform:uppercase; padding-top:4px;">Horas</div>
+        <div class="real-sched-day-col" style="font-family:'Oswald',sans-serif; color:var(--chalk); font-size:13px;">Lunes</div>
+        <div class="real-sched-day-col" style="font-family:'Oswald',sans-serif; color:var(--chalk); font-size:13px;">Martes</div>
+        <div class="real-sched-day-col" style="font-family:'Oswald',sans-serif; color:var(--chalk); font-size:13px;">Miércoles</div>
+        <div class="real-sched-day-col" style="font-family:'Oswald',sans-serif; color:var(--chalk); font-size:13px;">Jueves</div>
+        <div class="real-sched-day-col" style="font-family:'Oswald',sans-serif; color:var(--chalk); font-size:13px;">Viernes</div>
+        <div class="real-sched-day-col" style="font-family:'Oswald',sans-serif; color:var(--chalk); font-size:13px;">Sábado</div>
       </div>
-      <!-- Listado de filas de operaciones con sus barras de progreso sobre los días -->
-      <div id="c-bloques-rows" style="display:flex; flex-direction:column; gap:12px; min-width:600px; position:relative; min-height:100px;">
-        <!-- Se llena con las barras y operaciones -->
+
+      <!-- Cuadrícula Principal -->
+      <div id="real-scheduler-grid-body" style="position: relative; margin-top: 6px; display: grid; grid-template-columns: 80px repeat(6, 1fr); background-size: 100% 40px; background-image: linear-gradient(var(--border2) 1px, transparent 1px);">
+        <!-- Se llena con horas y bloques reales de trabajo -->
       </div>
+
     </div>
   </div>
 
@@ -1942,18 +1950,53 @@ function agregarNotaLoteActivo(){
 }
 
 function renderBloquesTiempo(sesiones, registros){
-  const headerContainer = document.getElementById('c-bloques-header');
-  const rowsContainer = document.getElementById('c-bloques-rows');
-  if(!headerContainer || !rowsContainer) return;
+  const gridBody = document.getElementById('real-scheduler-grid-body');
+  const daysHeader = document.getElementById('real-scheduler-days-header');
+  if(!gridBody || !daysHeader) return;
 
-  headerContainer.innerHTML = '';
-  rowsContainer.innerHTML = '';
+  gridBody.innerHTML = '';
 
   const sesionesConDatos = sesiones.filter(s => registros.some(r => r.sesionId === s.id));
   if(sesionesConDatos.length === 0){
-    rowsContainer.innerHTML = `<div style="text-align:center;padding:20px;color:var(--dim);font-size:13px;">Sin datos suficientes para graficar bloques.</div>`;
+    gridBody.innerHTML = `<div style="grid-column: span 7; text-align:center; padding:30px; color:var(--dim); font-size:12px;">Sin datos registrados en esta semana.</div>`;
     return;
   }
+
+  // Definir horas del rango (de 8:00 a 20:00 en intervalos de 30 minutos)
+  const rangoHoras = [];
+  for(let h = 8; h <= 20; h++){
+    rangoHoras.push(`${h}:00`);
+    if(h < 20) rangoHoras.push(`${h}:30`);
+  }
+
+  // Generar etiquetas de la columna de horas (eje Y) y celdas del fondo
+  rangoHoras.forEach(hora => {
+    const timeLabel = document.createElement('div');
+    timeLabel.style.cssText = `
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: var(--dim);
+      border-right: 1.5px solid var(--border);
+      border-bottom: 1px solid rgba(255,255,255,0.02);
+    `;
+    timeLabel.textContent = hora;
+    gridBody.appendChild(timeLabel);
+
+    // Celdas vacías del grid para las 6 columnas de los días
+    for(let d = 0; d < 6; d++){
+      const gridCell = document.createElement('div');
+      gridCell.style.cssText = `
+        height: 40px;
+        border-right: 1px solid rgba(255,255,255,0.03);
+        border-bottom: 1px dashed rgba(255,255,255,0.03);
+      `;
+      gridBody.appendChild(gridCell);
+    }
+  });
 
   // Encontrar rango de fechas de trabajo de este corte
   let minTs = Infinity, maxTs = -Infinity;
@@ -1967,138 +2010,133 @@ function renderBloquesTiempo(sesiones, registros){
 
   if(minTs === Infinity) { minTs = Date.now(); maxTs = Date.now(); }
 
-  // Normalizar fechas a inicio del día local
-  const startDay = new Date(minTs); startDay.setHours(0,0,0,0);
-  const endDay = new Date(maxTs); endDay.setHours(0,0,0,0);
+  // Normalizar fecha base para encontrar el Lunes
+  const baseDate = new Date(minTs);
+  const dayOffset = (baseDate.getDay() + 6) % 7; // Lunes = 0
+  const monday = new Date(baseDate);
+  monday.setDate(baseDate.getDate() - dayOffset);
+  monday.setHours(0,0,0,0);
 
-  // Generar lista de días en el rango
-  const diasRango = [];
-  let curr = new Date(startDay);
-  while(curr <= endDay){
-    diasRango.push(new Date(curr));
-    curr.setDate(curr.getDate() + 1);
-  }
+  // Obtener fechas de la semana (Lunes a Sábado)
+  const fechasSemana = [];
+  const nombresDiasHeaders = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const headerCols = daysHeader.querySelectorAll('.real-sched-day-col');
 
-  // Si hay menos de 5 días en el rango, extender para que se vea como el planificador
-  while(diasRango.length < 5){
-    const last = new Date(diasRango[diasRango.length-1]);
-    last.setDate(last.getDate() + 1);
-    diasRango.push(last);
-  }
+  for(let i = 0; i < 6; i++){
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    fechasSemana.push(d);
 
-  const totalDias = diasRango.length;
-
-  // Renderizar la cabecera de los días (Domingo 8/9, Lunes 8/10, etc.)
-  const nombresDias = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-  
-  // Agregar espacio vacío a la izquierda del header para alinear con las etiquetas de operaciones
-  const labelSpacer = document.createElement('div');
-  labelSpacer.style.cssText = 'width:120px; flex-shrink:0;';
-  headerContainer.appendChild(labelSpacer);
-
-  diasRango.forEach((d, idx) => {
-    const colHeader = document.createElement('div');
-    colHeader.style.cssText = `
-      flex: 1;
-      min-width: 90px;
-      background: var(--card);
-      border: 1px solid var(--border2);
-      border-radius: var(--rs);
-      padding: 6px 4px;
-      text-align: center;
-      font-size: 11px;
-    `;
-    // Si coincide con el día de hoy, marcar de verde como en tu imagen
-    const hoy = new Date();
-    const esHoy = d.getDate() === hoy.getDate() && d.getMonth() === hoy.getMonth() && d.getFullYear() === hoy.getFullYear();
-    if(esHoy){
-      colHeader.style.background = 'rgba(90,159,116,0.15)';
-      colHeader.style.borderColor = 'var(--green)';
-      colHeader.style.color = 'var(--green)';
+    // Actualizar texto del header del día
+    if(headerCols[i]) {
+      const hoy = new Date();
+      const esHoy = d.getDate() === hoy.getDate() && d.getMonth() === hoy.getMonth() && d.getFullYear() === hoy.getFullYear();
+      headerCols[i].innerHTML = `
+        <div style="font-family:'Oswald',sans-serif; font-size:12px; color:${esHoy ? 'var(--green)' : 'var(--dim)'}; text-transform:uppercase;">${nombresDiasHeaders[i]}</div>
+        <div style="font-family:'Space Mono',monospace; font-size:10px; font-weight:700; color:${esHoy ? 'var(--green)' : 'var(--chalk)'};">${d.getMonth()+1}/${d.getDate()}</div>
+      `;
+      if(esHoy) headerCols[i].style.background = 'rgba(90,159,116,0.06)';
+      else headerCols[i].style.background = 'transparent';
     }
+  }
 
-    colHeader.innerHTML = `
-      <div style="font-family:'Oswald',sans-serif; text-transform:uppercase; font-size:10px; color:var(--dim);">${nombresDias[d.getDay()]}</div>
-      <div style="font-family:'Space Mono'; font-weight:700; margin-top:2px;">${d.getMonth()+1}/${d.getDate()}</div>
-    `;
-    headerContainer.appendChild(colHeader);
-  });
+  // Paleta de colores premium para los bloques (pastel/brillante)
+  const colorMap = {
+    "Cuchillas": "rgba(224,142,187,0.85)",       // Rosado
+    "Basta de Bolsillos": "rgba(111,92,193,0.85)", // Morado oscuro
+    "Pinzas": "rgba(90,159,116,0.85)",            // Verde
+    "Secreta": "rgba(135,206,250,0.85)",          // Azul cielo
+    "Fundillo": "rgba(143,188,143,0.85)",         // Verde claro
+    "Bolsillo Posterior": "rgba(193,85,74,0.85)",  // Rojo teja
+    "Default": "rgba(193,127,62,0.85)"            // Oro
+  };
 
-  // Agrupar sesiones por operacion + talla
-  const opsTallasMap = {};
-  sesionesConDatos.forEach(s => {
-    const key = `${s.opNombre} (T. ${s.talla})`;
-    opsTallasMap[key] = s;
-  });
+  const getOpColor = (name) => {
+    for (const key in colorMap) {
+      if(name.toLowerCase().includes(key.toLowerCase())) return colorMap[key];
+    }
+    return colorMap["Default"];
+  };
 
-  // Dibujar cada fila de operacion
-  Object.keys(opsTallasMap).forEach(key => {
-    const s = opsTallasMap[key];
-    const regs = registros.filter(r => r.sesionId === s.id).sort((a,b)=>a.ts-b.ts);
-    if(regs.length === 0) return;
+  // Mapear cada sesión a bloques horarios reales basados en sus registros de piezas
+  fechasSemana.forEach((dia, dayIndex) => {
+    const dayStart = dia.getTime();
+    const dayEnd = dayStart + 24*60*60*1000;
 
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex; align-items:center; gap:8px;';
+    sesionesConDatos.forEach(s => {
+      const regsDia = registros.filter(r => r.sesionId === s.id && r.ts >= dayStart && r.ts < dayEnd).sort((a,b)=>a.ts-b.ts);
+      if(regsDia.length === 0) return;
 
-    // Etiqueta izquierda
-    const label = document.createElement('div');
-    label.style.cssText = `
-      width: 120px;
-      font-family: 'Oswald', sans-serif;
-      font-size: 11px;
-      color: var(--chalk);
-      text-transform: uppercase;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      flex-shrink: 0;
-    `;
-    label.textContent = key;
-    row.appendChild(label);
+      // Unir registros continuos de la misma sesión en bloques de tiempo reales
+      // Si la separación entre registros es menor a 40 minutos, consideramos que es parte del mismo bloque
+      let blockStartTs = regsDia[0].ts - regsDia[0].duracionSeg * 1000;
+      let blockEndTs = regsDia[0].ts;
+      let pzsAcumuladas = regsDia[0].cantidad;
 
-    // Contenedor de la barra que ocupa todo el ancho de los días
-    const barContainer = document.createElement('div');
-    barContainer.style.cssText = 'flex:1; display:flex; gap:8px; height:28px; background:rgba(255,255,255,0.02); border-radius:4px; position:relative;';
+      const dibujarBloque = (tIni, tFin, pzs) => {
+        const dIni = new Date(tIni);
+        const dFin = new Date(tFin);
 
-    // Para cada día, calcular si se trabajó y pintar la barra
-    diasRango.forEach((d, idx) => {
-      const dayStart = d.getTime();
-      const dayEnd = dayStart + 24*60*60*1000;
+        // Convertir horas a decimal (ej: 9:30 -> 9.5)Partiendo a las 8:00 AM
+        const startHour = Math.max(8, Math.min(20, dIni.getHours() + dIni.getMinutes()/60));
+        const endHour = Math.max(8, Math.min(20, dFin.getHours() + dFin.getMinutes()/60));
+        const durationHours = endHour - startHour;
+        if(durationHours < 0.25) return; // ignora bloques menores de 15 minutos
 
-      // Filtrar registros que caigan en este día
-      const regsDia = regs.filter(r => r.ts >= dayStart && r.ts < dayEnd);
-      const cell = document.createElement('div');
-      cell.style.cssText = 'flex:1; min-width:90px; position:relative;';
+        const topOffset = (startHour - 8) * 80;
+        const height = durationHours * 80;
 
-      if(regsDia.length > 0){
-        const totalPzsDia = regsDia.reduce((a,r)=>a+r.cantidad, 0);
-        // Barra estilo juego (bordes redondeados, verde brillante estilo tu foto)
-        const barBlock = document.createElement('div');
-        barBlock.style.cssText = `
+        const block = document.createElement('div');
+        block.style.cssText = `
           position: absolute;
-          inset: 3px 0;
-          background: linear-gradient(90deg, #5a9f74, #73bf8f);
-          border-radius: 12px;
+          top: ${topOffset}px;
+          height: ${height - 2}px;
+          left: calc(80px + ${dayIndex * (100/7.2)}%);
+          width: calc(${100/7.8}%);
+          background: ${getOpColor(s.opNombre)};
+          border-radius: 4px;
+          box-shadow: inset 0 0 6px rgba(255,255,255,0.2), 0 2px 4px rgba(0,0,0,0.3);
+          padding: 4px 6px;
+          overflow: hidden;
           display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-          border: 1px solid rgba(255,255,255,0.15);
+          flex-direction: column;
+          justify-content: flex-start;
+          align-items: flex-start;
+          z-index: 10;
+          cursor: pointer;
+          border: 1.2px solid rgba(255,255,255,0.15);
         `;
-        barBlock.innerHTML = `
-          <span style="font-family:'Space Mono'; font-size:10px; font-weight:700; color:var(--bg); text-shadow:0 1px 1px rgba(255,255,255,0.5);">${totalPzsDia} pzs</span>
+
+        const fmtTime = (d) => `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+
+        block.onclick = () => {
+          alert(`Operación: ${s.opNombre} (Talla ${s.talla})\nHora real: De ${fmtTime(dIni)} a ${fmtTime(dFin)}\nPiezas hechas en este bloque: ${pzs} pzs.\nRitmo: ${Math.round(pzs / (durationHours))} pzs/hr.`);
+        };
+
+        block.innerHTML = `
+          <div style="font-family:'Oswald',sans-serif; font-size:10px; color:var(--bg); font-weight:700; text-transform:uppercase; text-shadow: 0 0.5px 0.5px rgba(255,255,255,0.3); line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%;">${s.opNombre}</div>
+          <div style="font-family:'Space Mono',monospace; font-size:9px; font-weight:700; color:var(--bg); margin-top:2px;">${pzs} pzs (T.${s.talla})</div>
         `;
-        cell.appendChild(barBlock);
-      } else {
-        // Celda vacía punteada
-        cell.style.borderRight = '1px dashed rgba(255,255,255,0.05)';
+
+        gridBody.appendChild(block);
+      };
+
+      for(let k = 1; k < regsDia.length; k++){
+        const r = regsDia[k];
+        const rStart = r.ts - r.duracionSeg * 1000;
+        // Si el tiempo vacío entre lotes es menor a 40 minutos (2400s), unir
+        if(rStart - blockEndTs < 2400 * 1000){
+          blockEndTs = r.ts;
+          pzsAcumuladas += r.cantidad;
+        } else {
+          dibujarBloque(blockStartTs, blockEndTs, pzsAcumuladas);
+          blockStartTs = rStart;
+          blockEndTs = r.ts;
+          pzsAcumuladas = r.cantidad;
+        }
       }
-
-      barContainer.appendChild(cell);
+      dibujarBloque(blockStartTs, blockEndTs, pzsAcumuladas);
     });
-
-    row.appendChild(barContainer);
-    rowsContainer.appendChild(row);
   });
 }
 
