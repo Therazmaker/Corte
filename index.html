@@ -433,22 +433,27 @@ nav button.active{color:var(--gold);}
     <input type="range" id="cal-jornada-slider" min="2" max="14" value="8" style="width:100%;accent-color:var(--gold);" oninput="cambiarJornadaSlider(this.value)">
   </div>
 
-  <div class="chart-card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <button class="btn-secondary" style="margin:0;padding:6px 12px;width:auto;" onclick="navegarMes(-1)">‹ Ant</button>
-      <h3 style="margin:0;font-family:'Oswald',sans-serif;color:var(--gold);font-size:18px;text-transform:uppercase;" id="cal-mes-titulo">Mes Año</h3>
-      <button class="btn-secondary" style="margin:0;padding:6px 12px;width:auto;" onclick="navegarMes(1)">Sig ›</button>
+  <div class="chart-card" style="overflow-x: auto; padding: 12px 14px;">
+    <!-- Contenedor del Planificador Semanal Horario -->
+    <div id="weekly-scheduler-wrapper" style="min-width: 700px; background: var(--bg); border: 1.5px solid var(--border2); border-radius: var(--r); padding: 12px; position: relative;">
+      
+      <!-- Fila Superior de Días -->
+      <div id="scheduler-days-header" style="display: grid; grid-template-columns: 80px repeat(6, 1fr); border-bottom: 2px solid var(--border); padding-bottom: 8px; text-align: center;">
+        <div style="font-family:'Oswald',sans-serif; color:var(--dim); font-size:11px; text-transform:uppercase; padding-top:4px;">Horas</div>
+        <div class="sched-day-col" style="font-family:'Oswald',sans-serif; color:var(--chalk); font-size:13px;">Lunes</div>
+        <div class="sched-day-col" style="font-family:'Oswald',sans-serif; color:var(--chalk); font-size:13px;">Martes</div>
+        <div class="sched-day-col" style="font-family:'Oswald',sans-serif; color:var(--chalk); font-size:13px;">Miércoles</div>
+        <div class="sched-day-col" style="font-family:'Oswald',sans-serif; color:var(--chalk); font-size:13px;">Jueves</div>
+        <div class="sched-day-col" style="font-family:'Oswald',sans-serif; color:var(--chalk); font-size:13px;">Viernes</div>
+        <div class="sched-day-col" style="font-family:'Oswald',sans-serif; color:var(--chalk); font-size:13px;">Sábado</div>
+      </div>
+
+      <!-- Cuadrícula Principal (Horas y Bloques) -->
+      <div id="scheduler-grid-body" style="position: relative; margin-top: 6px; display: grid; grid-template-columns: 80px repeat(6, 1fr); background-size: 100% 40px; background-image: linear-gradient(var(--border2) 1px, transparent 1px);">
+        <!-- Se llena dinámicamente con horas y bloques absolutos -->
+      </div>
+
     </div>
-    <div class="calendar-grid">
-      <div class="calendar-day-header">Lun</div>
-      <div class="calendar-day-header">Mar</div>
-      <div class="calendar-day-header">Mié</div>
-      <div class="calendar-day-header">Jue</div>
-      <div class="calendar-day-header">Vie</div>
-      <div class="calendar-day-header">Sáb</div>
-      <div class="calendar-day-header">Dom</div>
-    </div>
-    <div class="calendar-grid" id="cal-days-container"></div>
   </div>
 
   <div class="card" style="margin-top:20px;border-color:var(--gold);" id="cal-prediccion-resumen">
@@ -2298,83 +2303,186 @@ function navegarMes(offset){
 }
 
 function renderCalendario(){
-  const container = document.getElementById('cal-days-container');
-  container.innerHTML = '';
-  
-  const y = calCurrentDate.getFullYear();
-  const m = calCurrentDate.getMonth();
-  
-  // Set titulo
-  const mesesNombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  document.getElementById('cal-mes-titulo').textContent = `${mesesNombres[m]} ${y}`;
-  
-  // Primer dia del mes y total dias
-  const primerDiaIndex = (new Date(y, m, 1).getDay() + 6) % 7; // Ajustar para Lunes=0 a Domingo=6
-  const totalDias = new Date(y, m + 1, 0).getDate();
-  
-  // Espacios vacíos del inicio
-  for(let i=0; i<primerDiaIndex; i++){
-    container.innerHTML += `<div class="calendar-day empty"></div>`;
-  }
-  
+  const gridBody = document.getElementById('scheduler-grid-body');
+  const daysHeader = document.getElementById('scheduler-days-header');
+  if(!gridBody || !daysHeader) return;
+
+  gridBody.innerHTML = '';
+
   // Calcular predicción sobre el último corte activo
   let predMeta = null;
   if(state.cortes.length > 0){
     const cActivo = state.cortes[state.cortes.length - 1];
     predMeta = calcularPrediccionCorte(cActivo.id, horasJornadaConfig);
   }
-  
-  // Dibujar días
-  const hoy = new Date();
-  for(let d=1; d<=totalDias; d++){
-    const currDateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const esHoy = hoy.getDate() === d && hoy.getMonth() === m && hoy.getFullYear() === y;
-    
-    let tasksHTML = '';
-    let badgeHTML = '';
-    
-    // Tareas sugeridas para hoy
-    if(predMeta && predMeta.planTrabajo[currDateStr]){
-      const tareasDia = predMeta.planTrabajo[currDateStr];
-      tasksHTML = `<div class="calendar-day-tasks">` + tareasDia.map(t => {
-        const tallaFmt = t.talla ? ` T.${t.talla}` : ' Glb';
-        return `<div class="calendar-task-item" title="${t.opNombre}${tallaFmt} (${t.pzs} pzs)">${t.pzs} ${t.opNombre}</div>`;
-      }).join('') + `</div>`;
+
+  // Definir horas del rango (de 8:00 a 20:00 en intervalos de 30 minutos)
+  const rangoHoras = [];
+  for(let h = 8; h <= 20; h++){
+    rangoHoras.push(`${h}:00`);
+    if(h < 20) rangoHoras.push(`${h}:30`);
+  }
+
+  // Generar etiquetas de la columna de horas (eje Y)
+  rangoHoras.forEach(hora => {
+    const timeLabel = document.createElement('div');
+    timeLabel.style.cssText = `
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: var(--dim);
+      border-right: 1.5px solid var(--border);
+      border-bottom: 1px solid rgba(255,255,255,0.02);
+    `;
+    timeLabel.textContent = hora;
+    gridBody.appendChild(timeLabel);
+
+    // Celdas vacías del grid para las 6 columnas de los días
+    for(let d = 0; d < 6; d++){
+      const gridCell = document.createElement('div');
+      gridCell.style.cssText = `
+        height: 40px;
+        border-right: 1px solid rgba(255,255,255,0.03);
+        border-bottom: 1px dashed rgba(255,255,255,0.03);
+      `;
+      gridBody.appendChild(gridCell);
     }
-    
-    // Si coincide con la predicción del corte activo, ponemos la meta predicha
-    if(predMeta && predMeta.fechaSimple === currDateStr){
-      badgeHTML = `<div class="calendar-day-badge predicted">🏁 Final ~${predMeta.horaTxt}</div>`;
-    }
-    
-    const isSelected = selectedDateStr === currDateStr;
-    
-    container.innerHTML += `
-      <div class="calendar-day ${esHoy?'today':''} ${isSelected?'selected':''}" style="cursor:pointer;" onclick="seleccionarDiaCal('${currDateStr}')">
-        <div class="calendar-day-num">${d}</div>
-        ${tasksHTML}
-        ${badgeHTML}
-      </div>`;
+  });
+
+  // Si no hay predicción o corte activo, terminar
+  if(!predMeta){
+    const resFecha = document.getElementById('cal-pred-fecha');
+    const resDetalles = document.getElementById('cal-pred-detalles');
+    if(resFecha) resFecha.textContent = 'Sin corte activo';
+    if(resDetalles) resDetalles.textContent = 'Crea un corte y registra al menos una pieza para proyectar.';
+    return;
+  }
+
+  // Determinar los 6 días de la semana de trabajo actual
+  // Usar el primer día de trabajo del plan como referencia
+  let planFechas = Object.keys(predMeta.planTrabajo).sort();
+  let baseDate = new Date();
+  if(planFechas.length > 0){
+    baseDate = new Date(planFechas[0]);
   }
   
+  // Encontrar el Lunes de esa semana de trabajo
+  const dayOffset = (baseDate.getDay() + 6) % 7; // Lunes = 0, Martes = 1, ...
+  const monday = new Date(baseDate);
+  monday.setDate(monday.getDate() - dayOffset);
+
+  // Obtener fechas de la semana (Lunes a Sábado)
+  const fechasSemana = [];
+  const nombresDiasHeaders = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  
+  const headerCols = daysHeader.querySelectorAll('.sched-day-col');
+
+  for(let i = 0; i < 6; i++){
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    fechasSemana.push(d);
+
+    // Actualizar texto del header del día
+    if(headerCols[i]) {
+      const hoy = new Date();
+      const esHoy = d.getDate() === hoy.getDate() && d.getMonth() === hoy.getMonth() && d.getFullYear() === hoy.getFullYear();
+      headerCols[i].innerHTML = `
+        <div style="font-family:'Oswald',sans-serif; font-size:12px; color:${esHoy ? 'var(--green)' : 'var(--dim)'}; text-transform:uppercase;">${nombresDiasHeaders[i]}</div>
+        <div style="font-family:'Space Mono',monospace; font-size:10px; font-weight:700; color:${esHoy ? 'var(--green)' : 'var(--chalk)'};">${d.getMonth()+1}/${d.getDate()}</div>
+      `;
+      if(esHoy) headerCols[i].style.background = 'rgba(90,159,116,0.06)';
+      else headerCols[i].style.background = 'transparent';
+    }
+  }
+
+  // Paleta de colores premium para los bloques de tareas sugeridas (pastel/brillante)
+  const colorMap = {
+    "Cuchillas": "rgba(224,142,187,0.85)",       // Rosado
+    "Basta de Bolsillos": "rgba(111,92,193,0.85)", // Morado oscuro
+    "Pinzas": "rgba(90,159,116,0.85)",            // Verde
+    "Secreta": "rgba(135,206,250,0.85)",          // Azul cielo
+    "Fundillo": "rgba(143,188,143,0.85)",         // Verde claro
+    "Bolsillo Posterior": "rgba(193,85,74,0.85)",  // Rojo teja
+    "Default": "rgba(193,127,62,0.85)"            // Oro
+  };
+
+  const getOpColor = (name) => {
+    for (const key in colorMap) {
+      if(name.toLowerCase().includes(key.toLowerCase())) return colorMap[key];
+    }
+    return colorMap["Default"];
+  };
+
+  // Dibujar bloques absolutos sobre la cuadrícula
+  fechasSemana.forEach((d, dayIndex) => {
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const tareasDia = predMeta.planTrabajo[dateStr];
+    if(!tareasDia) return;
+
+    tareasDia.forEach(t => {
+      // Calcular posición y altura
+      // inicio en horas (ej: 11.5 = 11:30 AM)
+      const startHour = Math.max(8, Math.min(20, t.startHour));
+      const endHour = Math.max(8, Math.min(20, t.endHour));
+      const durationHours = endHour - startHour;
+      if(durationHours <= 0) return;
+
+      // Calcular coordenadas
+      // 1 hora de altura equivale a 80px (2 celdas de 40px)
+      // El grid Y parte a las 8:00 AM
+      const topOffset = (startHour - 8) * 80;
+      const height = durationHours * 80;
+
+      // Posicionar en la columna correspondiente
+      // Col 1 = 80px (Y axis label), cada columna subsiguiente = (100%/6)
+      const leftPercent = 80 + (dayIndex * (100 - 80/700)) / 6; // corrección proporcional aproximada
+
+      const block = document.createElement('div');
+      block.style.cssText = `
+        position: absolute;
+        top: ${topOffset}px;
+        height: ${height - 2}px;
+        left: calc(80px + ${dayIndex * (100/7.2)}%);
+        width: calc(${100/7.8}%);
+        background: ${getOpColor(t.opNombre)};
+        border-radius: 4px;
+        box-shadow: inset 0 0 6px rgba(255,255,255,0.2), 0 2px 4px rgba(0,0,0,0.3);
+        padding: 4px 6px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: flex-start;
+        z-index: 10;
+        cursor: pointer;
+        border: 1.2px solid rgba(255,255,255,0.15);
+      `;
+
+      block.onclick = () => {
+        const startM = Math.round((startHour % 1) * 60);
+        const endM = Math.round((endHour % 1) * 60);
+        alert(`Sugerido: ${t.opNombre} (Talla ${t.talla})\nDe ${Math.floor(startHour)}:${String(startM).padStart(2,'0')} a ${Math.floor(endHour)}:${String(endM).padStart(2,'0')}\nMeta sugerida: ${t.pzs} piezas.`);
+      };
+
+      block.innerHTML = `
+        <div style="font-family:'Oswald',sans-serif; font-size:10px; color:var(--bg); font-weight:700; text-transform:uppercase; text-shadow: 0 0.5px 0.5px rgba(255,255,255,0.3); line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%;">${t.opNombre}</div>
+        <div style="font-family:'Space Mono',monospace; font-size:9.5px; font-weight:700; color:var(--bg); margin-top:2px;">T.${t.talla}</div>
+      `;
+
+      gridBody.appendChild(block);
+    });
+  });
+
   // Renderizar resumen textual
   const resFecha = document.getElementById('cal-pred-fecha');
   const resDetalles = document.getElementById('cal-pred-detalles');
   
-  if(predMeta){
-    resFecha.textContent = predMeta.labelFecha;
-    resDetalles.textContent = `Basado en ${predMeta.pzsRestantes} pzs restantes a tu ritmo de trabajo con jornadas de ${horasJornadaConfig}h al día (excluyendo domingos).`;
-    
-    // Si hay un día seleccionado, actualizar su detalle
-    if(selectedDateStr) {
-      renderDetalleDia(predMeta.planTrabajo[selectedDateStr], selectedDateStr);
-    } else {
-      document.getElementById('cal-day-detail').style.display = 'none';
-    }
-  } else {
-    resFecha.textContent = 'Sin corte activo';
-    resDetalles.textContent = 'Crea un corte y registra al menos una pieza para proyectar.';
-    document.getElementById('cal-day-detail').style.display = 'none';
+  if(resFecha) resFecha.textContent = predMeta.labelFecha;
+  if(resDetalles) {
+    resDetalles.textContent = `Predicción del corte basada en jornadas de ${horasJornadaConfig}h diarias. Haz clic en cualquier bloque de color para ver detalles de la operación sugerida.`;
   }
 }
 
