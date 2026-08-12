@@ -558,6 +558,7 @@ nav button.active{color:var(--gold);}
   <div class="modal-ftr">
     <button class="mf-btn mf-undo" onclick="deshacerUltimoLote()" id="m-undo-btn" style="display:none;">↩ Deshacer</button>
     <button class="mf-btn mf-pause" onclick="pausarSesion()">⏸ Pausar</button>
+    <button class="mf-btn" onclick="reiniciarSesionActiva()" style="background:rgba(193,85,74,0.1);color:var(--red);border:1.5px solid rgba(193,85,74,0.25);flex:0 0 auto;padding:15px 18px;">🗑️ Reiniciar</button>
     <button class="mf-btn mf-end" onclick="forzarTermino()">⚡ Forzar Término</button>
   </div>
 </div>
@@ -825,16 +826,19 @@ function renderPausedAndCompleted(){
   if(pausadas.length>0) {
      divPausadas.style.display = 'block';
      document.getElementById('lp-content').innerHTML = pausadas.map(p => `
-       <div class="card" style="margin-bottom:10px;border-color:var(--dim);">
-         <div style="display:flex;justify-content:space-between;align-items:center;">
-           <div>
-             <div style="font-family:'Oswald',sans-serif;color:var(--chalk);font-size:16px;">${p.opNombre}</div>
-             <div style="font-size:12px;color:var(--dim);">${p.talla?'Talla '+p.talla:'Global'} - Llevas ${piezasHechas(p.id)} de ${p.meta} pzs</div>
-           </div>
-           <button class="btn-secondary" style="width:auto;margin:0;padding:8px 14px;color:var(--gold);border-color:var(--gold);" onclick="reanudarSesion('${p.id}')">▶ Reanudar</button>
-         </div>
-       </div>
-     `).join('');
+        <div class="card" style="margin-bottom:10px;border-color:var(--dim);padding:14px 16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div style="flex:1;min-width:0;padding-right:10px;">
+              <div style="font-family:'Oswald',sans-serif;color:var(--chalk);font-size:16px;text-transform:uppercase;">${p.opNombre}</div>
+              <div style="font-size:12px;color:var(--dim);margin-top:2px;">${p.talla?'Talla '+p.talla:'Global'} - Llevas ${piezasHechas(p.id)} de ${p.meta} pzs</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+              <button class="btn-secondary" style="width:auto;margin:0;padding:8px 12px;color:var(--gold);border-color:var(--gold);" onclick="reanudarSesion('${p.id}')">▶ Reanudar</button>
+              <button class="btn-secondary" style="width:auto;margin:0;padding:8px 10px;color:var(--red);border-color:rgba(193,85,74,0.4);background:rgba(193,85,74,0.05);" onclick="eliminarSesionPausada('${p.id}')">🗑️ Borrar</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
   } else {
      divPausadas.style.display = 'none';
   }
@@ -1273,6 +1277,38 @@ function registrarLote(cant){
     }
   };
   requestAnimationFrame(step);
+}
+
+function reiniciarSesionActiva(){
+  const s = getActiva();
+  if(!s) return;
+  if(!confirm(`¿Estás seguro de que deseas REINICIAR esta operación desde cero?\nSe borrarán permanentemente las ${piezasHechas(s.id)} piezas registradas.`)) return;
+  if(!confirm(`⚠️ ATENCIÓN: Esta acción no se puede deshacer. ¿Proceder a reiniciar?`)) return;
+
+  state.registros = state.registros.filter(r => r.sesionId !== s.id);
+  s.estado = 'activa';
+  delete s.finTs;
+  delete s.reanudadoTs;
+  delete s.ultimaNota;
+
+  saveState();
+  renderModal();
+  alert('Operación reiniciada a 0 piezas.');
+}
+
+function eliminarSesionPausada(id){
+  const s = state.sesiones.find(x => x.id === id);
+  if(!s) return;
+  
+  const hecho = piezasHechas(s.id);
+  if(!confirm(`¿Eliminar por completo la sesión pausada de "${s.opNombre}"?\nSe perderá el registro de las ${hecho} piezas hechas.`)) return;
+
+  // Borrar registros y la sesión
+  state.registros = state.registros.filter(r => r.sesionId !== s.id);
+  state.sesiones = state.sesiones.filter(x => x.id !== s.id);
+
+  saveState();
+  renderRegistro();
 }
 
 function deshacerUltimoLote(){
