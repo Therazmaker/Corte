@@ -531,8 +531,6 @@ nav button.active{color:var(--gold);}
         <div id="m-perf-badge" style="font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:var(--dim);"></div>
       </div>
 
-      </div>
-
       <!-- Banner de notas e incidencias del lote activo -->
       <div id="m-note-box" style="
         border-radius:var(--rs);
@@ -594,18 +592,27 @@ nav button.active{color:var(--gold);}
       </div>
 
       <button id="m-main-btn">+10</button>
-      <div class="m-sec-row">
+      <div class="m-sec-row" style="margin-bottom:20px;">
         <button class="m-sec-btn" id="m-sec5">+5</button>
         <button class="m-sec-btn" id="m-sec20">+20</button>
         <button class="m-sec-btn" id="m-manual">✏️</button>
       </div>
     </div>
   </div>
-  <div class="modal-ftr">
-    <button class="mf-btn mf-undo" onclick="deshacerUltimoLote()" id="m-undo-btn" style="display:none;">↩ Deshacer</button>
-    <button class="mf-btn mf-pause" onclick="pausarSesion()">⏸ Pausar</button>
-    <button class="mf-btn" onclick="reiniciarSesionActiva()" style="background:rgba(193,85,74,0.1);color:var(--red);border:1.5px solid rgba(193,85,74,0.25);flex:0 0 auto;padding:15px 18px;">🗑️ Reiniciar</button>
-    <button class="mf-btn mf-end" onclick="forzarTermino()">⚡ Forzar Término</button>
+  
+  <!-- FTR con padding optimizado y botón de colaborador -->
+  <div class="modal-ftr" style="display:flex; flex-direction:column; gap:8px; padding:10px 14px;">
+    <!-- Acciones secundarias en fila superior del footer -->
+    <div style="display:flex; gap:8px; width:100%;">
+      <button class="mf-btn mf-undo" onclick="deshacerUltimoLote()" id="m-undo-btn" style="display:none; flex:1; padding:10px 0;">↩ Deshacer</button>
+      <button class="mf-btn" onclick="terminarPorColaborador()" style="background:rgba(90,159,116,0.12); color:var(--green); border:1.5px solid rgba(90,159,116,0.3); flex:1; padding:10px 0; font-family:'Oswald',sans-serif; font-size:11px; font-weight:700; text-transform:uppercase;">👥 Terminó Socio</button>
+      <button class="mf-btn" onclick="reiniciarSesionActiva()" style="background:rgba(193,85,74,0.08); color:var(--red); border:1.5px solid rgba(193,85,74,0.2); flex:0 0 auto; padding:10px 14px;">🗑️ Reiniciar</button>
+    </div>
+    <!-- Acciones principales abajo -->
+    <div style="display:flex; gap:8px; width:100%;">
+      <button class="mf-btn mf-pause" onclick="pausarSesion()" style="flex:1; padding:12px 0;">⏸ Pausar</button>
+      <button class="mf-btn mf-end" onclick="forzarTermino()" style="flex:1; padding:12px 0;">⚡ Forzar Fin</button>
+    </div>
   </div>
 </div>
 
@@ -1553,7 +1560,8 @@ function fmtHora12(date){
 // Calcula el ritmo actual en segundos-por-pieza de la sesión activa.
 // Usa solo los registros de la sesión actual (ritmo en tiempo real).
 function calcularRitmoActual(s){
-  const regs = state.registros.filter(r => r.sesionId === s.id);
+  // Excluir registros con duracionSeg === 0 (hechos por colaborador)
+  const regs = state.registros.filter(r => r.sesionId === s.id && r.duracionSeg > 0);
   if(regs.length === 0) return null;
   const totalPz = regs.reduce((a,r) => a+r.cantidad, 0);
   const totalSeg = regs.reduce((a,r) => a+r.duracionSeg, 0);
@@ -1684,8 +1692,8 @@ function actualizarBannerRendimiento(s){
   const badgeEl = document.getElementById('m-perf-badge');
   if(!banner) return;
 
-  // Ritmo actual de la sesion en curso (seg/pieza)
-  const regsActual = state.registros.filter(r=>r.sesionId===s.id);
+  // Ritmo actual de la sesion en curso (seg/pieza) - Excluyendo colaborador
+  const regsActual = state.registros.filter(r=>r.sesionId===s.id && r.duracionSeg > 0);
   if(regsActual.length === 0){
     labelEl.textContent = 'Registra piezas para ver tu ritmo';
     detEl.textContent   = '';
@@ -1696,18 +1704,20 @@ function actualizarBannerRendimiento(s){
   const totalSegCur = regsActual.reduce((a,r)=>a+r.duracionSeg, 0);
   const ritmoActual = totalSegCur / totalPzsCur; // seg por pieza
 
-  // Mejor ritmo historico de la misma operacion (sesiones completas de OTRA sesion)
+  // Mejor ritmo historico de la misma operacion (sesiones completas de OTRA sesion) - Excluyendo colaborador
   const sesHistoricas = state.sesiones.filter(x=>
     x.opNombre === s.opNombre && x.estado === 'completa' && x.id !== s.id
   );
   let mejorSeg = null;
   sesHistoricas.forEach(sh=>{
-    const regs = state.registros.filter(r=>r.sesionId===sh.id);
+    const regs = state.registros.filter(r=>r.sesionId===sh.id && r.duracionSeg > 0);
     if(regs.length>0){
       const p = regs.reduce((a,r)=>a+r.cantidad,0);
       const t = regs.reduce((a,r)=>a+r.duracionSeg,0);
-      const r = t/p;
-      if(mejorSeg===null || r<mejorSeg) mejorSeg = r;
+      if(p>0){
+        const r = t/p;
+        if(mejorSeg===null || r<mejorSeg) mejorSeg = r;
+      }
     }
   });
 
@@ -1834,6 +1844,28 @@ function forzarTermino(){
   state.registros.push({id:uid(), sesionId:s.id, ts:now, cantidad:rest, duracionSeg:Math.round(rest*avgSeg)});
   s.estado='completa'; s.finTs=now; saveState();
   alert('Cierre forzado. Datos promedio generados.'); closeModal();
+}
+
+function terminarPorColaborador(){
+  const s = getActiva(); if(!s) return;
+  const h = piezasHechas(s.id), rest = s.meta - h;
+  if(rest <= 0) return;
+  if(!confirm(`¿Tu compañero terminó las ${rest} piezas restantes?\nSe marcarán como completadas por tu socio (duración 0s para no alterar tu ritmo personal).`)) return;
+
+  const now = Date.now();
+  state.registros.push({
+    id: uid(), 
+    sesionId: s.id, 
+    ts: now, 
+    cantidad: rest, 
+    duracionSeg: 0, 
+    nota: "Hecho por Socio/Colaborador"
+  });
+  s.estado = 'completa'; 
+  s.finTs = now; 
+  saveState();
+  alert('Talla finalizada por colaborador exitosamente.'); 
+  closeModal();
 }
 
 function actualizarGrafico(sActiva){
