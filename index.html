@@ -558,8 +558,41 @@ nav button.active{color:var(--gold);}
         ">⚠️ Reportar Demora</button>
       </div>
 
-      <div id="m-eta-box" style="text-align:center;padding:10px 0 4px;border-top:1px dashed var(--border2);margin-top:4px;"></div>
-      
+      <!-- Panel de proyecciones de tiempo -->
+      <div id="m-proyecciones-panel" style="
+        border-radius:var(--rs);
+        padding:12px 14px;
+        margin:8px 0 6px;
+        border:1.5px solid rgba(193,127,62,0.25);
+        background:rgba(193,127,62,0.04);
+        border-top:1px dashed var(--border2);
+        margin-top:6px;
+      ">
+        <!-- Fila de horarios de término -->
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <div style="flex:1;background:var(--card2);border-radius:var(--rs);padding:8px 10px;border:1px solid var(--border2);">
+            <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px;">📦 Este paquete</div>
+            <div id="m-proj-paquete" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:var(--chalk);">—</div>
+          </div>
+          <div style="flex:1;background:var(--card2);border-radius:var(--rs);padding:8px 10px;border:1px solid var(--border2);">
+            <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px;">🏁 Toda la op.</div>
+            <div id="m-proj-op" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:var(--gold);">—</div>
+          </div>
+        </div>
+        <!-- Proyección a hora clave -->
+        <div style="background:var(--card2);border-radius:var(--rs);padding:8px 10px;border:1px solid var(--border2);display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <div style="flex:1;">
+            <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px;">🎯 A las <span id="m-hora-clave-label">12:00 PM</span></div>
+            <div id="m-proj-clave" style="font-family:'Space Mono',monospace;font-size:14px;color:var(--green);">—</div>
+          </div>
+          <button onclick="abrirCambiarHoraClave()" style="
+            background:var(--border2);border:none;color:var(--dim);
+            font-family:'Oswald',sans-serif;font-size:9px;padding:4px 8px;
+            border-radius:3px;cursor:pointer;text-transform:uppercase;white-space:nowrap;flex-shrink:0;
+          ">✎ Cambiar</button>
+        </div>
+      </div>
+
       <button id="m-main-btn">+10</button>
       <div class="m-sec-row">
         <button class="m-sec-btn" id="m-sec5">+5</button>
@@ -635,6 +668,23 @@ nav button.active{color:var(--gold);}
     <div style="display:flex; gap:10px; margin-top:10px;">
       <button class="btn-secondary" style="margin:0; flex:1;" id="rm-btn-editar-logs" onclick="abrirEditorLogs()">✏️ Editar Lotes</button>
       <button class="btn-primary" style="margin:0; flex:1;" onclick="cerrarResultado()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CAMBIAR HORA CLAVE -->
+<div id="hora-clave-modal" style="position:fixed;inset:0;z-index:90;background:rgba(15,24,33,0.88);display:none;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--card);border:1.5px solid var(--border2);border-radius:var(--r);width:100%;max-width:320px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+    <div style="font-family:'Oswald',sans-serif;font-size:16px;color:var(--gold);margin-bottom:4px;">🎯 Hora Clave</div>
+    <div style="font-size:12px;color:var(--dim);margin-bottom:14px;">¿A qué hora quieres saber cuántas piezas llevarás?</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;" id="hc-chips">
+      <!-- chips generados por JS -->
+    </div>
+    <label class="field-label">O escoge una hora:</label>
+    <input type="time" id="hc-input" value="12:00" style="margin-bottom:12px;">
+    <div style="display:flex;gap:8px;">
+      <button class="btn-secondary" style="margin:0;flex:1;" onclick="cerrarHoraClave()">Cancelar</button>
+      <button class="btn-primary" style="margin:0;flex:1;" onclick="guardarHoraClave()">Guardar</button>
     </div>
   </div>
 </div>
@@ -1279,6 +1329,7 @@ function updateModalTimer(){
   ].filter(x => x !== null).join(':');
   
   document.getElementById('m-timer').textContent = timerStr;
+  actualizarProyeccionesModal();
 }
 
 function pausarSesion(){ const s=getActiva(); if(s){ s.estado='pausada'; saveState(); } closeModal(); }
@@ -1357,6 +1408,7 @@ function renderModal(){
   }
   
   actualizarGrafico(s);
+  actualizarProyeccionesModal();
 }
 
 function registrarLote(cant){
@@ -1479,6 +1531,149 @@ function deshacerUltimoLote(){
   }
   saveState();
   renderModal();
+}
+
+/* ======== PROYECCIONES DE HORA DE TÉRMINO ======== */
+// Lee/guarda la hora clave del localStorage (formato "HH:MM" en 24h)
+function getHoraClave(){
+  return localStorage.getItem('horaClave') || '12:00';
+}
+function setHoraClave(val){
+  localStorage.setItem('horaClave', val);
+}
+
+// Formatea Date en "HH:MM AM/PM"
+function fmtHora12(date){
+  let h = date.getHours(), m = date.getMinutes();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+
+// Calcula el ritmo actual en segundos-por-pieza de la sesión activa.
+// Usa solo los registros de la sesión actual (ritmo en tiempo real).
+function calcularRitmoActual(s){
+  const regs = state.registros.filter(r => r.sesionId === s.id);
+  if(regs.length === 0) return null;
+  const totalPz = regs.reduce((a,r) => a+r.cantidad, 0);
+  const totalSeg = regs.reduce((a,r) => a+r.duracionSeg, 0);
+  if(totalPz === 0) return null;
+  return totalSeg / totalPz; // seg por pieza
+}
+
+function calcularProyecciones(s){
+  const ritmoSegPz = calcularRitmoActual(s);
+  if(!ritmoSegPz) return null;
+
+  const ahora = Date.now();
+  const ahoraSeg = ahora / 1000;
+
+  // --- 1. Piezas restantes de este paquete (talla actual) ---
+  const hechasPaquete = piezasHechas(s.id);
+  const restPaquete = Math.max(0, s.meta - hechasPaquete);
+  const segParaPaquete = restPaquete * ritmoSegPz;
+  const horaPaquete = new Date(ahora + segParaPaquete * 1000);
+
+  // --- 2. Piezas restantes de TODA la operación ---
+  const corte = state.cortes.find(x => x.id === s.corteId);
+  let horaOp = null;
+  if(corte){
+    const sesSameOpComp = state.sesiones.filter(x =>
+      x.corteId === s.corteId && x.opNombre === s.opNombre && x.estado === 'completa'
+    );
+    const tallasCompletas = sesSameOpComp.map(x => x.talla);
+    const tallasPend = corte.tallas.filter(t => !tallasCompletas.includes(t.nombre));
+    const totalPendOp = tallasPend.reduce((a,t) => a+t.cantidad, 0);
+    // Restar lo ya hecho en el paquete actual (incluido en tallasPend porque no está completa)
+    const piezasRestantesOp = Math.max(0, totalPendOp - hechasPaquete);
+    const segParaOp = piezasRestantesOp * ritmoSegPz;
+    horaOp = new Date(ahora + segParaOp * 1000);
+  }
+
+  // --- 3. Proyección a hora clave ---
+  const [hcH, hcM] = getHoraClave().split(':').map(Number);
+  const horaClaveDt = new Date();
+  horaClaveDt.setHours(hcH, hcM, 0, 0);
+  // Si la hora clave ya pasó hoy, no calcular
+  let proyeccionClave = null;
+  if(horaClaveDt.getTime() > ahora){
+    const segHastaClave = (horaClaveDt.getTime() - ahora) / 1000;
+    const piezasAdicionales = segHastaClave / ritmoSegPz;
+    proyeccionClave = Math.floor(hechasPaquete + piezasAdicionales);
+  }
+
+  return { horaPaquete, horaOp, proyeccionClave, metaPaquete: s.meta };
+}
+
+function actualizarProyeccionesModal(){
+  const s = getActiva();
+  if(!s) return;
+
+  const pEl = document.getElementById('m-proj-paquete');
+  const opEl = document.getElementById('m-proj-op');
+  const clEl = document.getElementById('m-proj-clave');
+  const hcLbl = document.getElementById('m-hora-clave-label');
+  if(!pEl || !opEl || !clEl) return;
+
+  // Actualizar etiqueta de la hora clave
+  const hc = getHoraClave();
+  const [hcH, hcM] = hc.split(':').map(Number);
+  const hcAmpm = hcH >= 12 ? 'PM' : 'AM';
+  const hcH12 = hcH % 12 || 12;
+  if(hcLbl) hcLbl.textContent = `${hcH12}:${String(hcM).padStart(2,'0')} ${hcAmpm}`;
+
+  const proj = calcularProyecciones(s);
+  if(!proj){
+    pEl.textContent = '—';
+    opEl.textContent = '—';
+    clEl.textContent = 'Registra piezas para proyectar';
+    clEl.style.color = 'var(--dim)';
+    return;
+  }
+
+  pEl.textContent = fmtHora12(proj.horaPaquete);
+  opEl.textContent = proj.horaOp ? fmtHora12(proj.horaOp) : '—';
+
+  if(proj.proyeccionClave !== null){
+    const falta = proj.metaPaquete - proj.proyeccionClave;
+    if(falta <= 0){
+      clEl.textContent = `✅ ${proj.proyeccionClave} pzs (¡Meta cumplida!)`;
+      clEl.style.color = 'var(--green)';
+    } else {
+      clEl.textContent = `~${proj.proyeccionClave} pzs (faltan ${falta})`;
+      clEl.style.color = falta <= 10 ? 'var(--gold)' : 'var(--red)';
+    }
+  } else {
+    clEl.textContent = 'Hora clave ya pasó';
+    clEl.style.color = 'var(--dim)';
+  }
+}
+
+function abrirCambiarHoraClave(){
+  const modal = document.getElementById('hora-clave-modal');
+  const input = document.getElementById('hc-input');
+  const chips = document.getElementById('hc-chips');
+  input.value = getHoraClave();
+  // Chips de opciones comunes
+  const opciones = ['10:00','11:00','12:00','13:00','14:00','17:00','18:00'];
+  chips.innerHTML = opciones.map(h => {
+    const [hh, mm] = h.split(':').map(Number);
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+    const h12 = hh % 12 || 12;
+    return `<div class="chip ${getHoraClave()===h?'sel':''}" onclick="document.getElementById('hc-input').value='${h}';this.parentNode.querySelectorAll('.chip').forEach(c=>c.classList.remove('sel'));this.classList.add('sel');">${h12}:${String(mm).padStart(2,'0')} ${ampm}</div>`;
+  }).join('');
+  modal.style.display = 'flex';
+}
+
+function cerrarHoraClave(){
+  document.getElementById('hora-clave-modal').style.display = 'none';
+}
+
+function guardarHoraClave(){
+  const val = document.getElementById('hc-input').value;
+  if(val) setHoraClave(val);
+  cerrarHoraClave();
+  actualizarProyeccionesModal();
 }
 
 function actualizarBannerRendimiento(s){
