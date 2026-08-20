@@ -749,6 +749,65 @@ let chartObj = null;
 let selCorteId=null, selOp=null, selTalla=null;
 
 /* ======== CORTES (PRODUCCIONES) ======== */
+// Calcula el tiempo estimado total de costura para un corte basándose en el historial
+function obtenerEstimacionCorte(c){
+  let segundosTotales = 0;
+  const desgloseOps = [];
+
+  const totalPzs = c.tallas.reduce((sum,t)=>sum+t.cantidad, 0);
+
+  c.operaciones.forEach(op => {
+    // Buscar historial de esta operación para sacar el promedio (excluyendo 0s de socio)
+    const sesionesOp = state.sesiones.filter(x=>x.opNombre === op.nombre && x.estado === 'completa');
+    let avgSegPz = 45; // valor inicial razonable por defecto (45s por pieza)
+    
+    let totalPzsHist = 0;
+    let totalSegHist = 0;
+    sesionesOp.forEach(s => {
+      const regs = state.registros.filter(r => r.sesionId === s.id && r.duracionSeg > 0);
+      totalPzsHist += regs.reduce((sum,r)=>sum+r.cantidad, 0);
+      totalSegHist += regs.reduce((sum,r)=>sum+r.duracionSeg, 0);
+    });
+
+    if(totalPzsHist > 0) {
+      avgSegPz = totalSegHist / totalPzsHist;
+    }
+
+    // Calcular las piezas objetivo de esta operación en este corte
+    let pzsOp = 0;
+    if(op.porTalla){
+      pzsOp = totalPzs;
+    } else {
+      pzsOp = totalPzs; // Si es global, el total de piezas a pasar es igual
+    }
+
+    const segsOp = pzsOp * avgSegPz;
+    segundosTotales += segsOp;
+
+    desgloseOps.push({
+      nombre: op.nombre,
+      segundos: segsOp,
+      porcentaje: 0
+    });
+  });
+
+  // Calcular porcentajes e identificar cuellos de botella
+  desgloseOps.forEach(d => {
+    if(segundosTotales > 0) {
+      d.porcentaje = Math.round((d.segundos / segundosTotales) * 100);
+    }
+  });
+
+  // Ordenar cuellos de botella de mayor a menor tiempo
+  desgloseOps.sort((a,b)=>b.segundos - a.segundos);
+
+  return {
+    segundosTotales,
+    horas: segundosTotales / 3600,
+    cuellosBotella: desgloseOps.slice(0, 2) // Top 2 operaciones más lentas
+  };
+}
+
 function renderCortes(){
   const list = document.getElementById('cortes-list');
   list.innerHTML='';
@@ -758,14 +817,49 @@ function renderCortes(){
   }
   state.cortes.forEach(c=>{
     const totalPzs = c.tallas.reduce((s,t)=>s+t.cantidad,0);
+    const est = obtenerEstimacionCorte(c);
+    
+    // Formatear horas estimadas
+    let estTxt = '';
+    if(est.horas < 1) {
+      estTxt = Math.round(est.segundosTotales/60) + ' min';
+    } else {
+      const h = Math.floor(est.horas);
+      const m = Math.round((est.horas - h) * 60);
+      estTxt = `${h}h ${m}m`;
+    }
+
+    // Renderizar cuellos de botella
+    const botellasHtml = est.cuellosBotella.map(cb => {
+      const cbMin = Math.round(cb.segundos / 60);
+      const cbHr = (cb.segundos / 3600).toFixed(1);
+      const valTxt = cb.segundos >= 3600 ? `${cbHr}h` : `${cbMin}m`;
+      return `<div style="font-size:10px;color:var(--dim);margin-top:2px;display:flex;justify-content:space-between;">
+        <span>• ${cb.nombre}</span>
+        <span style="font-family:'Space Mono',monospace;color:var(--gold);font-weight:600;">${valTxt} (${cb.porcentaje}%)</span>
+      </div>`;
+    }).join('');
+
     list.innerHTML+=`
       <div class="card" style="margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <div>
+          <div style="flex:1;padding-right:12px;">
             <div style="font-family:'Oswald',sans-serif;font-size:18px;color:var(--gold);">${c.nombre}</div>
             <div style="font-size:12px;color:var(--dim);margin-top:4px;">${c.tallas.length} tallas · ${c.operaciones.length} ops · Total: ${totalPzs} pzs</div>
+            
+            <!-- Tarjeta predictiva dentro del corte -->
+            <div style="margin-top:12px;padding:10px 12px;background:var(--card2);border:1.5px solid var(--border);border-radius:var(--rs);">
+              <div style="font-family:'Oswald',sans-serif;font-size:11px;color:var(--gold);letter-spacing:0.04em;text-transform:uppercase;display:flex;justify-content:space-between;">
+                <span>📊 Costura Estimada</span>
+                <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--chalk);font-weight:700;">~${estTxt}</span>
+              </div>
+              <div style="border-top:1px dashed var(--border2);margin-top:8px;padding-top:6px;">
+                <div style="font-size:9px;color:var(--faint);text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">Mayor esfuerzo (Cuellos de Botella)</div>
+                ${botellasHtml || '<div style="font-size:10px;color:var(--faint);">Sin operaciones asignadas</div>'}
+              </div>
+            </div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;margin-top:2px;">
             <button class="btn-secondary" style="width:auto;margin:0;padding:6px 12px;font-size:12px;" onclick="editarCorte('${c.id}')">✏️ Editar</button>
             <button class="btn-secondary" style="width:auto;margin:0;padding:6px 12px;font-size:12px;border-color:var(--gold);color:var(--gold);" onclick="abrirAnalitica('${c.id}')">📊 Analítica</button>
           </div>
@@ -1878,21 +1972,49 @@ function actualizarGrafico(sActiva){
   regsAct.forEach(r=>{ acumP+=r.cantidad; acumT+=r.duracionSeg; dataAct.push({x:acumT/60, y:acumP}); }); // X en mins
 
   // Extraer datos de sesiones anteriores de la MISMA OPERACIÓN
-  const prevSes = state.sesiones.filter(x=>x.opNombre===sActiva.opNombre && x.estado==='completa');
+  const prevSes = state.sesiones.filter(x=>x.opNombre===sActiva.opNombre && x.estado==='completa' && x.id!==sActiva.id);
+  
+  // Encontrar la sesión récord (menor seg/pieza promedio)
+  let bestSesId = null;
+  let bestSegPz = Infinity;
+  
+  prevSes.forEach(ps => {
+    const regs = state.registros.filter(r=>r.sesionId===ps.id && r.duracionSeg > 0);
+    if(regs.length > 0){
+      const p = regs.reduce((a,r)=>a+r.cantidad,0);
+      const t = regs.reduce((a,r)=>a+r.duracionSeg,0);
+      if(p > 0){
+        const avg = t/p;
+        if(avg < bestSegPz) {
+          bestSegPz = avg;
+          bestSesId = ps.id;
+        }
+      }
+    }
+  });
+
   const datasets = [{
     label: 'Talla Actual', data: dataAct,
     borderColor:'#c17f3e', backgroundColor:'rgba(193,127,62,0.1)',
     borderWidth:3, fill:true, tension:0.1, zIndex:10
   }];
 
-  prevSes.forEach((ps,i)=>{
+  prevSes.forEach((ps)=>{
     const regs = state.registros.filter(r=>r.sesionId===ps.id).sort((a,b)=>a.ts-b.ts);
     const dt = [{x:0,y:0}]; let ap=0, at=0;
     regs.forEach(r=>{ ap+=r.cantidad; at+=r.duracionSeg; dt.push({x:at/60,y:ap}); });
+    
+    const isBest = ps.id === bestSesId;
     datasets.push({
-      label: 'Talla '+ps.talla, data: dt,
-      borderColor:'rgba(168,178,189,0.3)', borderWidth:1.5, fill:false, tension:0.1,
-      pointRadius:0, zIndex:1
+      label: isBest ? `★ Récord (Talla ${ps.talla||'Glb'})` : 'Talla '+ps.talla,
+      data: dt,
+      borderColor: isBest ? 'rgba(90,159,116,0.85)' : 'rgba(168,178,189,0.15)',
+      borderWidth: isBest ? 2.5 : 1.2,
+      borderDash: isBest ? [5, 5] : [],
+      fill: false,
+      tension: 0.1,
+      pointRadius: 0,
+      zIndex: isBest ? 5 : 1
     });
   });
 
