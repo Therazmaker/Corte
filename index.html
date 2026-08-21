@@ -591,6 +591,19 @@ nav button.active{color:var(--gold);}
         </div>
       </div>
 
+      <!-- Panel de Coaching: ¿Qué pasa si aceleras? -->
+      <div id="m-coaching-panel" style="
+        border-radius:var(--rs);
+        padding:10px 12px;
+        margin:0 0 8px;
+        border:1.5px solid rgba(168,178,189,0.15);
+        background:rgba(15,24,33,0.6);
+        display:none;
+      ">
+        <div style="font-family:'Oswald',sans-serif;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">💡 Si aceleras...</div>
+        <div id="m-coaching-rows" style="display:flex;flex-direction:column;gap:4px;"></div>
+      </div>
+
       <button id="m-main-btn">+10</button>
       <div class="m-sec-row" style="margin-bottom:20px;">
         <button class="m-sec-btn" id="m-sec5">+5</button>
@@ -1431,6 +1444,7 @@ function updateModalTimer(){
   
   document.getElementById('m-timer').textContent = timerStr;
   actualizarProyeccionesModal();
+  actualizarCoachingPanel();
 }
 
 function pausarSesion(){ const s=getActiva(); if(s){ s.estado='pausada'; saveState(); } closeModal(); }
@@ -1510,6 +1524,7 @@ function renderModal(){
   
   actualizarGrafico(s);
   actualizarProyeccionesModal();
+  actualizarCoachingPanel();
 }
 
 function registrarLote(cant){
@@ -1776,6 +1791,115 @@ function guardarHoraClave(){
   if(val) setHoraClave(val);
   cerrarHoraClave();
   actualizarProyeccionesModal();
+}
+
+/* ======== COACHING: "Si aceleras X seg, terminas Y minutos antes" ======== */
+function actualizarCoachingPanel(){
+  const panel = document.getElementById('m-coaching-panel');
+  const rows  = document.getElementById('m-coaching-rows');
+  if(!panel || !rows) return;
+
+  const s = getActiva();
+  if(!s){ panel.style.display = 'none'; return; }
+
+  const ritmoActual = calcularRitmoActual(s); // seg/pieza actual
+  if(!ritmoActual){ panel.style.display = 'none'; return; }
+
+  // Buscar el ritmo récord histórico de esta operación
+  const sesHistoricas = state.sesiones.filter(x =>
+    x.opNombre === s.opNombre && x.estado === 'completa' && x.id !== s.id
+  );
+  let mejorSegPz = null;
+  sesHistoricas.forEach(sh => {
+    const regs = state.registros.filter(r => r.sesionId === sh.id && r.duracionSeg > 0);
+    if(regs.length > 0){
+      const p = regs.reduce((a,r) => a+r.cantidad, 0);
+      const t = regs.reduce((a,r) => a+r.duracionSeg, 0);
+      if(p > 0){
+        const avg = t/p;
+        if(mejorSegPz === null || avg < mejorSegPz) mejorSegPz = avg;
+      }
+    }
+  });
+
+  // Piezas restantes en toda la operación (no solo este paquete)
+  const corte = state.cortes.find(x => x.id === s.corteId);
+  let piezasRestantesOp = s.meta - piezasHechas(s.id); // mínimo: el paquete actual
+  if(corte){
+    const sesSameOpComp = state.sesiones.filter(x =>
+      x.corteId === s.corteId && x.opNombre === s.opNombre && x.estado === 'completa'
+    );
+    const tallasCompletas = sesSameOpComp.map(x => x.talla);
+    const tallasPend = corte.tallas.filter(t => !tallasCompletas.includes(t.nombre));
+    const totalPendOp = tallasPend.reduce((a,t) => a+t.cantidad, 0);
+    piezasRestantesOp = Math.max(piezasRestantesOp, totalPendOp - piezasHechas(s.id));
+  }
+
+  if(piezasRestantesOp <= 0){ panel.style.display = 'none'; return; }
+
+  // Generar entre 1-3 escenarios de mejora
+  const escenarios = [];
+  const gap = mejorSegPz !== null ? ritmoActual - mejorSegPz : null;
+
+  // Si ya estás al nivel récord o mejor, no mostrar coaching
+  if(gap !== null && gap <= 0){ panel.style.display = 'none'; return; }
+
+  // Escenario 1: Mejora pequeña (-5 seg/pz), si aplica
+  const mejora5 = 5;
+  if(ritmoActual > mejora5){
+    const minAhorradosMejora5 = Math.round((mejora5 * piezasRestantesOp) / 60);
+    if(minAhorradosMejora5 >= 1) escenarios.push({
+      label: `−${mejora5}s/pz`,
+      valor: minAhorradosMejora5,
+      color: 'var(--gold)',
+      icon: '⚡'
+    });
+  }
+
+  // Escenario 2: Mejora media (-10 seg/pz), si aplica
+  const mejora10 = 10;
+  if(ritmoActual > mejora10){
+    const minAhorradosMejora10 = Math.round((mejora10 * piezasRestantesOp) / 60);
+    if(minAhorradosMejora10 >= 1) escenarios.push({
+      label: `−${mejora10}s/pz`,
+      valor: minAhorradosMejora10,
+      color: '#e07f3e',
+      icon: '🔥'
+    });
+  }
+
+  // Escenario 3: Al ritmo del récord personal (si existe y es diferente)
+  if(gap !== null && gap > 10){
+    const minAhorradosRecord = Math.round((gap * piezasRestantesOp) / 60);
+    if(minAhorradosRecord >= 1) escenarios.push({
+      label: `A tu récord`,
+      valor: minAhorradosRecord,
+      color: 'var(--green)',
+      icon: '★'
+    });
+  }
+
+  if(escenarios.length === 0){ panel.style.display = 'none'; return; }
+
+  // Formatear el ahorro en minutos u horas
+  function fmtTiempoAhorro(min){
+    if(min < 60) return `${min} min antes`;
+    const h = Math.floor(min/60);
+    const m = min % 60;
+    return m > 0 ? `${h}h ${m}m antes` : `${h}h antes`;
+  }
+
+  rows.innerHTML = escenarios.map(e => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-size:13px;">${e.icon}</span>
+        <span style="font-family:'Oswald',sans-serif;font-size:11px;color:${e.color};text-transform:uppercase;letter-spacing:.04em;">${e.label}</span>
+      </div>
+      <span style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:${e.color};">terminas ${fmtTiempoAhorro(e.valor)}</span>
+    </div>
+  `).join('');
+
+  panel.style.display = 'block';
 }
 
 function actualizarBannerRendimiento(s){
